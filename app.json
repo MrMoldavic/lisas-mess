@@ -21,7 +21,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Lisa's Mess utilise l'appareil photo pour ajouter un vêtement à ta garde-robe.",
+          "photosPermission": "Lisa's Mess accède à tes photos pour importer un vêtement existant."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -18,7 +18,7 @@ export function Button({
   disabled = false,
   style,
 }: ButtonProps) {
-  const { colors, radius, spacing, typography } = useTheme();
+  const { colors, radius, spacing } = useTheme();
   const isPrimary = variant === 'primary';
 
   return (
@@ -30,23 +30,22 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         {
-          paddingVertical: spacing.sm + 2,
-          paddingHorizontal: spacing.md,
-          borderRadius: radius.md,
+          paddingVertical: spacing.md + 2,
+          paddingHorizontal: spacing.lg,
+          borderRadius: radius.full,
           backgroundColor: isPrimary ? colors.primary : colors.surface,
-          borderColor: isPrimary ? colors.primary : colors.border,
-          opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
+          borderColor: isPrimary ? 'transparent' : colors.border,
+          borderWidth: isPrimary ? 0 : 1,
+          shadowColor: colors.primary,
+          shadowOpacity: isPrimary && !disabled ? 0.35 : 0,
+          elevation: isPrimary && !disabled ? 6 : 0,
+          opacity: disabled ? 0.45 : 1,
+          transform: [{ scale: pressed ? 0.97 : 1 }],
         },
         style,
       ]}
     >
-      <Text
-        style={[
-          typography.body,
-          styles.label,
-          { color: isPrimary ? colors.onPrimary : colors.text },
-        ]}
-      >
+      <Text style={[styles.label, { color: isPrimary ? colors.onPrimary : colors.text }]}>
         {label}
       </Text>
     </Pressable>
@@ -57,7 +56,12 @@ const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 14,
   },
-  label: { fontWeight: '600' },
+  label: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
 });

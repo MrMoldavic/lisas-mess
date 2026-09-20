@@ -20,8 +20,8 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen name="index" options={{ title: "Lisa's Mess" }} />
-        <Stack.Screen name="details" options={{ title: 'Détail' }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="pieces" options={{ title: 'Ma garde-robe' }} />
         <Stack.Screen name="+not-found" options={{ title: 'Introuvable' }} />
       </Stack>
     </SafeAreaProvider>
