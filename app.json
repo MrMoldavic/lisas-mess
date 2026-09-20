@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Lisa's Mess",
+    "slug": "lisas-mess",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "lisasmess",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lisasmess.app"
+    },
+    "android": {
+      "package": "com.lisasmess.app",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
