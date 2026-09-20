@@ -1,24 +1,29 @@
 # Lisa's Mess
 
-Application mobile React Native, basée sur **Expo** (workflow managé) avec
+Application mobile React Native, basée sur **Expo SDK 54** (workflow managé) avec
 **TypeScript** et **expo-router** (routage par fichiers).
 
 ## Prérequis
 
-- Node.js 20 LTS ou plus (actuellement **non installé** sur cette machine)
+- Node.js 20 LTS ou plus (validé avec Node 24.19.0 / npm 11.17.0)
 - L'app Expo Go sur un téléphone, ou un émulateur Android / simulateur iOS
 
 ## Démarrage
 
 ```bash
 npm install
-npx expo install --fix   # aligne les versions des paquets sur le SDK Expo installé
 npm start                # puis « a » pour Android, « i » pour iOS, « w » pour le web
 ```
 
-> Les versions listées dans `package.json` correspondent à Expo SDK 54.
-> `npx expo install --fix` est la commande de référence pour les recaler si un
-> SDK plus récent est utilisé.
+> Utiliser `npx expo install <paquet>` plutôt que `npm install <paquet>` pour tout
+> module natif : la commande choisit la version compatible avec le SDK.
+> `npx expo install --fix` recale l'ensemble après une mise à jour.
+
+Il n'y a volontairement **pas de `babel.config.js`** : depuis le SDK 54, Expo
+applique `babel-preset-expo` depuis son propre `node_modules`. N'en ajouter un
+qu'avec `npx expo customize babel.config.js`, qui installe aussi le preset en
+dépendance — un fichier écrit à la main échoue au bundling avec
+`Cannot find module 'babel-preset-expo'`.
 
 ## Arborescence
 
@@ -55,3 +60,4 @@ L'alias `@/` pointe vers `src/` (configuré dans `tsconfig.json`).
 | `npm start` | Serveur de développement Expo |
 | `npm run android` / `ios` / `web` | Démarre directement sur la plateforme |
 | `npm run typecheck` | Vérification TypeScript (`tsc --noEmit`) |
+| `npx expo export --platform web` | Bundle de vérification : compile tout le code |
