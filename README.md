@@ -1,6 +1,6 @@
 # Lisa's Mess
 
-Application mobile React Native, basée sur **Expo SDK 54** (workflow managé) avec
+Application mobile React Native, basée sur **Expo SDK 57** (workflow managé) avec
 **TypeScript** et **expo-router** (routage par fichiers).
 
 ## Prérequis
@@ -19,7 +19,7 @@ npm start                # puis « a » pour Android, « i » pour iOS, « w » 
 > module natif : la commande choisit la version compatible avec le SDK.
 > `npx expo install --fix` recale l'ensemble après une mise à jour.
 
-Il n'y a volontairement **pas de `babel.config.js`** : depuis le SDK 54, Expo
+Il n’y a volontairement **pas de `babel.config.js`** : Expo
 applique `babel-preset-expo` depuis son propre `node_modules`. N'en ajouter un
 qu'avec `npx expo customize babel.config.js`, qui installe aussi le preset en
 dépendance — un fichier écrit à la main échoue au bundling avec
