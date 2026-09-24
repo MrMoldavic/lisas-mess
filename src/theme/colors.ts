@@ -16,6 +16,12 @@ export const palette = {
   top: { light: '#F4845F', dark: '#FF9B74' },
   bottom: { light: '#5B8FF9', dark: '#7FA9FF' },
   shoes: { light: '#E0A32E', dark: '#FFC96B' },
+  // Saisons : teintes franchement distinctes de celles des familles ci-dessus,
+  // car les deux jeux de pilules se ressemblent visuellement.
+  spring: { light: '#3FA46A', dark: '#6FD49F' },
+  summer: { light: '#C98A00', dark: '#FFCF5C' },
+  autumn: { light: '#B5521C', dark: '#E5824A' },
+  winter: { light: '#3A79C9', dark: '#8CB8F2' },
   danger: { light: '#C8352C', dark: '#FF6B60' },
 } as const;
 

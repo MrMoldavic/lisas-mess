@@ -22,6 +22,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="pieces" options={{ title: 'Ma garde-robe' }} />
+        <Stack.Screen name="tenue" options={{ title: 'Nouvelle tenue' }} />
         <Stack.Screen name="+not-found" options={{ title: 'Introuvable' }} />
       </Stack>
     </SafeAreaProvider>

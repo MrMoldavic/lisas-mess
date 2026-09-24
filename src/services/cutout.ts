@@ -21,6 +21,15 @@ const POLL_TIMEOUT_MS = 90_000;
 
 const TOKEN = process.env.EXPO_PUBLIC_REPLICATE_API_TOKEN;
 
+/**
+ * Interrupteur explicite, volontairement séparé du jeton.
+ *
+ * Avoir un jeton ne veut pas dire vouloir appeler l'API : sans crédit sur le
+ * compte, chaque photo déclenchait un appel voué à l'échec et une alerte. Le
+ * détourage reste donc éteint tant que cette variable ne vaut pas `true`.
+ */
+const ENABLED = process.env.EXPO_PUBLIC_CUTOUT_ENABLED === 'true';
+
 export class CutoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -28,9 +37,9 @@ export class CutoutError extends Error {
   }
 }
 
-/** Permet à l'UI de ne pas proposer le détourage quand aucun jeton n'est configuré. */
+/** L'UI n'appelle le détourage que s'il est activé ET qu'un jeton est présent. */
 export function isCutoutConfigured(): boolean {
-  return Boolean(TOKEN);
+  return ENABLED && Boolean(TOKEN);
 }
 
 async function toDataUri(uri: string): Promise<string> {

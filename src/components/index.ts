@@ -1,6 +1,15 @@
 export { Button } from './Button';
 export { CategoryPills } from './CategoryPills';
-export { CategorySheet } from './CategorySheet';
 export type { CategoryFilter } from './CategoryPills';
+export { CategorySheet } from './CategorySheet';
+export { Confetti } from './Confetti';
+export { FilterPills } from './FilterPills';
+export type { PillEntry } from './FilterPills';
+export { GarmentSlider } from './GarmentSlider';
+export { ModeSwitch } from './ModeSwitch';
+export { OutfitViewer } from './OutfitViewer';
+export type { Mode } from './ModeSwitch';
 export { Reveal } from './Reveal';
 export { Screen } from './Screen';
+export { SeasonPills } from './SeasonPills';
+export type { SeasonFilter } from './SeasonPills';

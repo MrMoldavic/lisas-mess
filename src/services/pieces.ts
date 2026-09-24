@@ -2,6 +2,13 @@ import { Directory, File, Paths } from 'expo-file-system';
 
 import type { CategoryId } from '@/types';
 
+import {
+  DEFAULT_SCALE,
+  forgetPieceScale,
+  listScales,
+  setPieceScale,
+} from './pieceScales';
+
 /**
  * Stockage des pièces sur le disque de l'app.
  *
@@ -24,6 +31,8 @@ export type Piece = {
   uri: string;
   /** `null` pour les pièces enregistrées avant l'arrivée des catégories. */
   category: CategoryId | null;
+  /** Facteur d'affichage, 1 si la pièce n'a jamais été ajustée. */
+  scale: number;
 };
 
 function ensureDirectory(): void {
@@ -46,17 +55,28 @@ function buildFileName(category: CategoryId | null, extension: string): string {
   return category ? `${stamp}${SEPARATOR}${category}.${extension}` : `${stamp}.${extension}`;
 }
 
-function toPiece(file: File): Piece {
-  return { id: file.name, uri: file.uri, category: parseCategory(file.name) };
+/**
+ * Construit une pièce. Les échelles sont passées en argument plutôt que relues
+ * pour chaque fichier : un seul accès disque suffit à toute la liste.
+ */
+function toPiece(file: File, scales: Record<string, number> = listScales()): Piece {
+  return {
+    id: file.name,
+    uri: file.uri,
+    category: parseCategory(file.name),
+    scale: scales[file.name] ?? DEFAULT_SCALE,
+  };
 }
 
 /** Les pièces, de la plus récente à la plus ancienne (les noms sont horodatés). */
 export function listPieces(): Piece[] {
   ensureDirectory();
 
+  const scales = listScales();
+
   return PIECES_DIRECTORY.list()
     .filter((entry): entry is File => entry instanceof File)
-    .map(toPiece)
+    .map((file) => toPiece(file, scales))
     .sort((a, b) => b.id.localeCompare(a.id));
 }
 
@@ -123,6 +143,14 @@ export function setPieceCategory(id: string, category: CategoryId | null): Piece
 
   if (name !== id) {
     file.rename(name);
+
+    // L'échelle est indexée par nom de fichier : reclasser renomme, donc il faut
+    // déplacer l'entrée, sinon l'ajustement de cadrage serait perdu.
+    const scales = listScales();
+    if (scales[id] !== undefined) {
+      setPieceScale(name, scales[id]);
+      forgetPieceScale(id);
+    }
   }
 
   return toPiece(new File(PIECES_DIRECTORY, name));
@@ -133,4 +161,7 @@ export function removePiece(id: string): void {
   if (file.exists) {
     file.delete();
   }
+  // Sans ça, l'échelle survivrait à la photo et serait réattribuée par erreur
+  // à une future pièce portant le même nom.
+  forgetPieceScale(id);
 }
