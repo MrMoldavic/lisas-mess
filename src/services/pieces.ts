@@ -3,11 +3,14 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { CategoryId } from '@/types';
 
 import {
-  DEFAULT_SCALE,
-  forgetPieceScale,
-  listScales,
-  setPieceScale,
-} from './pieceScales';
+  DEFAULT_LAYOUT,
+  forgetPieceLayout,
+  listLayouts,
+  setPieceLayout,
+} from './pieceLayouts';
+import type { PieceLayout } from './pieceLayouts';
+import { renamePieceInOutfits } from './outfits';
+import { trimTransparentMargins } from './trim';
 
 /**
  * Stockage des pièces sur le disque de l'app.
@@ -31,8 +34,8 @@ export type Piece = {
   uri: string;
   /** `null` pour les pièces enregistrées avant l'arrivée des catégories. */
   category: CategoryId | null;
-  /** Facteur d'affichage, 1 si la pièce n'a jamais été ajustée. */
-  scale: number;
+  /** Cadrage d'affichage : taille et position, neutres si jamais ajustés. */
+  layout: PieceLayout;
 };
 
 function ensureDirectory(): void {
@@ -59,12 +62,17 @@ function buildFileName(category: CategoryId | null, extension: string): string {
  * Construit une pièce. Les échelles sont passées en argument plutôt que relues
  * pour chaque fichier : un seul accès disque suffit à toute la liste.
  */
-function toPiece(file: File, scales: Record<string, number> = listScales()): Piece {
+function toPiece(
+  file: File,
+  layouts: Record<string, PieceLayout> = listLayouts()
+): Piece {
   return {
     id: file.name,
-    uri: file.uri,
+    // La date de modification invalide les caches d'image quand un fichier est
+    // réécrit sur place (rognage des pièces existantes).
+    uri: file.modificationTime ? `${file.uri}?v=${file.modificationTime}` : file.uri,
     category: parseCategory(file.name),
-    scale: scales[file.name] ?? DEFAULT_SCALE,
+    layout: layouts[file.name] ?? DEFAULT_LAYOUT,
   };
 }
 
@@ -72,11 +80,11 @@ function toPiece(file: File, scales: Record<string, number> = listScales()): Pie
 export function listPieces(): Piece[] {
   ensureDirectory();
 
-  const scales = listScales();
+  const layouts = listLayouts();
 
   return PIECES_DIRECTORY.list()
     .filter((entry): entry is File => entry instanceof File)
-    .map((file) => toPiece(file, scales))
+    .map((file) => toPiece(file, layouts))
     .sort((a, b) => b.id.localeCompare(a.id));
 }
 
@@ -89,7 +97,8 @@ export async function addPiece(
   const extension = sourceUri.split('?')[0].split('.').pop() ?? 'jpg';
   const destination = new File(PIECES_DIRECTORY, buildFileName(category, extension));
 
-  await new File(sourceUri).copy(destination);
+  const trimmed = await trimTransparentMargins(sourceUri);
+  await new File(trimmed ?? sourceUri).copy(destination);
 
   return toPiece(destination);
 }
@@ -113,7 +122,8 @@ export async function addPieceFromUrl(
     const extension = downloaded.name.split('?')[0].split('.').pop() ?? 'png';
     const destination = new File(PIECES_DIRECTORY, buildFileName(category, extension));
 
-    await downloaded.copy(destination);
+    const trimmed = await trimTransparentMargins(downloaded.uri);
+    await (trimmed ? new File(trimmed) : downloaded).copy(destination);
 
     return toPiece(destination);
   } finally {
@@ -146,14 +156,66 @@ export function setPieceCategory(id: string, category: CategoryId | null): Piece
 
     // L'échelle est indexée par nom de fichier : reclasser renomme, donc il faut
     // déplacer l'entrée, sinon l'ajustement de cadrage serait perdu.
-    const scales = listScales();
-    if (scales[id] !== undefined) {
-      setPieceScale(name, scales[id]);
-      forgetPieceScale(id);
+    const layouts = listLayouts();
+    if (layouts[id] !== undefined) {
+      setPieceLayout(name, layouts[id]);
+      forgetPieceLayout(id);
     }
+
+    // Même raison pour les tenues : elles désignent la pièce par son nom de fichier.
+    renamePieceInOutfits(id, name);
   }
 
   return toPiece(new File(PIECES_DIRECTORY, name));
+}
+
+/**
+ * Marqueur écrit une fois les pièces existantes rognées. Le numéro change quand
+ * le calcul du contour s'améliore (v2 : ombres et pixels parasites ignorés),
+ * pour reproposer le rognage aux pièces déjà traitées par l'ancienne version.
+ */
+const TRIM_DONE_FILE = new File(Paths.document, 'pieces-trimmed-v2');
+
+/** Vrai tant que les pièces d'avant le rognage automatique n'ont pas été traitées. */
+export function needsTrimOfExistingPieces(): boolean {
+  if (TRIM_DONE_FILE.exists) return false;
+  ensureDirectory();
+  return PIECES_DIRECTORY.list().some(
+    (entry) => entry instanceof File && /\.png$/i.test(entry.name)
+  );
+}
+
+/**
+ * Rogne les marges transparentes des pièces déjà enregistrées, sur place : le
+ * nom du fichier (donc l'identifiant et les tenues qui y renvoient) ne change
+ * pas.
+ *
+ * L'échelle réglée sur une pièce rognée est remise à 1 : elle compensait les
+ * marges, et appliquée à l'image rognée elle ferait paraître le vêtement trop
+ * grand.
+ *
+ * @returns les identifiants des pièces effectivement rognées.
+ */
+export async function trimExistingPieces(): Promise<string[]> {
+  ensureDirectory();
+  const trimmedIds: string[] = [];
+
+  for (const entry of PIECES_DIRECTORY.list()) {
+    if (!(entry instanceof File) || !/\.png$/i.test(entry.name)) continue;
+
+    const trimmed = await trimTransparentMargins(entry.uri);
+    if (!trimmed) continue;
+
+    const source = new File(trimmed);
+    entry.write(await source.bytes());
+    source.delete();
+
+    forgetPieceLayout(entry.name);
+    trimmedIds.push(entry.name);
+  }
+
+  if (!TRIM_DONE_FILE.exists) TRIM_DONE_FILE.create();
+  return trimmedIds;
 }
 
 export function removePiece(id: string): void {
@@ -163,5 +225,5 @@ export function removePiece(id: string): void {
   }
   // Sans ça, l'échelle survivrait à la photo et serait réattribuée par erreur
   // à une future pièce portant le même nom.
-  forgetPieceScale(id);
+  forgetPieceLayout(id);
 }

@@ -16,6 +16,11 @@ export const palette = {
   top: { light: '#F4845F', dark: '#FF9B74' },
   bottom: { light: '#5B8FF9', dark: '#7FA9FF' },
   shoes: { light: '#E0A32E', dark: '#FFC96B' },
+  // Fonds pastel des postes du composeur. Ils restent clairs en mode sombre, à
+  // peine atténués : c'est ce qui garde une pièce noire lisible dessus.
+  topSoft: { light: '#FFE1D5', dark: '#EBCFC4' },
+  bottomSoft: { light: '#DCE7FF', dark: '#C7D3EC' },
+  shoesSoft: { light: '#FFEFCB', dark: '#EBDDB9' },
   // Saisons : teintes franchement distinctes de celles des familles ci-dessus,
   // car les deux jeux de pilules se ressemblent visuellement.
   spring: { light: '#3FA46A', dark: '#6FD49F' },

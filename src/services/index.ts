@@ -5,19 +5,26 @@ export {
   addPieceFromUrl,
   setPieceCategory,
   removePiece,
+  needsTrimOfExistingPieces,
+  trimExistingPieces,
 } from './pieces';
 export type { Piece } from './pieces';
 export {
-  setPieceScale,
-  clampScale,
+  setPieceLayout,
+  clampLayout,
   MIN_SCALE,
   MAX_SCALE,
-  DEFAULT_SCALE,
-} from './pieceScales';
+  DEFAULT_LAYOUT,
+} from './pieceLayouts';
+export type { PieceLayout } from './pieceLayouts';
 export {
   listOutfits,
   addOutfit,
+  updateOutfitPieces,
   toggleOutfitFavorite,
+  setOutfitSlotLayout,
+  clearOutfitLayouts,
+  resetOutfitScalesFor,
   findDuplicate,
   removeOutfit,
   forgetPiece,

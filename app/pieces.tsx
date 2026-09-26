@@ -19,6 +19,7 @@ import {
   CategorySheet,
   ModeSwitch,
   OutfitViewer,
+  GarmentLayer,
   Screen,
   SeasonPills,
 } from '@/components';
@@ -35,11 +36,23 @@ import {
   removeOutfit,
   removePiece,
   setPieceCategory,
+  clearOutfitLayouts,
   toggleOutfitFavorite,
+  updateOutfitPieces,
+  DuplicateOutfitError,
+  needsTrimOfExistingPieces,
+  trimExistingPieces,
+  resetOutfitScalesFor,
 } from '@/services';
-import type { Outfit, Piece } from '@/services';
-import { colorNameForCategory, colorNameForSeason, findCategory, findSeason } from '@/types';
-import type { CategoryId } from '@/types';
+import type { Outfit, Piece, PieceLayout } from '@/services';
+import {
+  OUTFIT_SLOTS,
+  colorNameForCategory,
+  colorNameForSeason,
+  findCategory,
+  findSeason,
+} from '@/types';
+import type { CategoryId, OutfitSlot } from '@/types';
 
 const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
@@ -47,7 +60,53 @@ const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
   quality: 0.85,
 };
 
-type Status = null | 'saving' | 'cutout';
+type Status = null | 'saving' | 'cutout' | 'trimming';
+
+/**
+ * Recentre une composition pour son affichage en vignette.
+ *
+ * En composant une tenue, on déplace souvent les trois vêtements dans la même
+ * direction pour les faire tenir ensemble ; la composition finit alors décalée
+ * sur la toile. Retirer à chaque calque le décalage **moyen** du groupe ramène
+ * son centre de gravité au milieu de la carte, sans changer les écarts entre
+ * les vêtements — c'est-à-dire sans toucher à la composition elle-même.
+ *
+ * C'est une moyenne des positions, pas un vrai cadre englobant : les dimensions
+ * réellement dessinées dépendent des proportions de chaque photo, qu'on ne
+ * connaît pas ici. L'approximation suffit tant que les trois vêtements occupent
+ * des hauteurs comparables.
+ *
+ * Volontairement limité à la vignette : le composeur et la vue agrandie
+ * montrent la tenue telle qu'elle a été réglée.
+ */
+function centeredLayouts(
+  outfit: Outfit,
+  pieceById: Map<string, Piece>
+): Partial<Record<OutfitSlot, PieceLayout>> {
+  const resolved = OUTFIT_SLOTS.flatMap((slot) => {
+    const pieceId = outfit[slot.key];
+    const piece = pieceId ? pieceById.get(pieceId) : undefined;
+    if (!piece) return [];
+
+    return [{ key: slot.key, layout: outfit.layouts[slot.key] ?? piece.layout }];
+  });
+
+  if (resolved.length === 0) return {};
+
+  const meanX = resolved.reduce((sum, e) => sum + e.layout.offsetX, 0) / resolved.length;
+  const meanY = resolved.reduce((sum, e) => sum + e.layout.offsetY, 0) / resolved.length;
+
+  return Object.fromEntries(
+    resolved.map((entry) => [
+      entry.key,
+      {
+        ...entry.layout,
+        offsetX: entry.layout.offsetX - meanX,
+        offsetY: entry.layout.offsetY - meanY,
+      },
+    ])
+  );
+}
 
 /**
  * Quatre cartes visibles d'un coup — la carte « + » plus trois tenues — donc
@@ -77,6 +136,33 @@ export default function PiecesScreen() {
 
   useEffect(() => {
     setPieces(listPieces());
+
+    // Les pièces importées avant le rognage automatique gardent leurs marges :
+    // on propose une fois de les traiter. « Plus tard » reposera la question.
+    if (!needsTrimOfExistingPieces()) return;
+
+    Alert.alert(
+      'Rogner les marges ?',
+      'Les nouvelles pièces sont désormais rognées au ras du vêtement. Rogner aussi les marges transparentes des pièces déjà enregistrées ? Leur réglage de taille sera remis à zéro.',
+      [
+        { text: 'Plus tard', style: 'cancel' },
+        {
+          text: 'Rogner',
+          onPress: async () => {
+            setStatus('trimming');
+            try {
+              resetOutfitScalesFor(await trimExistingPieces());
+              setPieces(listPieces());
+              setOutfits(listOutfits());
+            } catch (error) {
+              Alert.alert('Rognage interrompu', String(error));
+            } finally {
+              setStatus(null);
+            }
+          },
+        },
+      ]
+    );
   }, []);
 
   /** Relu à chaque retour sur l'écran, notamment après la création d'une tenue. */
@@ -99,6 +185,26 @@ export default function PiecesScreen() {
     [outfits, seasonFilter]
   );
 
+  /** Enregistre les vêtements choisis dans le mode « Modifier » de la vue agrandie. */
+  const changeOutfitPieces = useCallback(
+    (outfit: Outfit, selection: Record<OutfitSlot, string | null>): boolean => {
+      try {
+        const updated = updateOutfitPieces(outfit.id, selection);
+        setOutfits(listOutfits());
+        setViewing(updated);
+        return true;
+      } catch (error) {
+        if (error instanceof DuplicateOutfitError) {
+          Alert.alert('Tenue déjà enregistrée', error.message);
+          return false;
+        }
+        Alert.alert('Enregistrement impossible', String(error));
+        return false;
+      }
+    },
+    []
+  );
+
   const toggleFavorite = useCallback((outfit: Outfit) => {
     toggleOutfitFavorite(outfit.id);
     const refreshed = listOutfits();
@@ -108,6 +214,13 @@ export default function PiecesScreen() {
     setViewing((current) =>
       current ? refreshed.find((outfit) => outfit.id === current.id) ?? null : null
     );
+  }, []);
+
+  const resetOutfitFraming = useCallback((outfit: Outfit) => {
+    clearOutfitLayouts(outfit.id);
+    const refreshed = listOutfits();
+    setOutfits(refreshed);
+    setViewing(refreshed.find((entry) => entry.id === outfit.id) ?? null);
   }, []);
 
   const confirmRemoveOutfit = useCallback((outfit: Outfit) => {
@@ -196,6 +309,7 @@ export default function PiecesScreen() {
     (piece: Piece, category: CategoryId | null) => {
       try {
         setPieceCategory(piece.id, category);
+        setOutfits(listOutfits());
         setPieces(listPieces());
       } catch (error) {
         Alert.alert('Classement impossible', String(error));
@@ -292,7 +406,10 @@ export default function PiecesScreen() {
                   <Text style={[styles.outfitPlus, { color: colors.primary }]}>+</Text>
                 </Pressable>
 
-                {visibleOutfits.map((outfit) => (
+                {visibleOutfits.map((outfit) => {
+                  const centered = centeredLayouts(outfit, pieceById);
+
+                  return (
                   <Pressable
                     key={outfit.id}
                     accessibilityRole="button"
@@ -309,22 +426,26 @@ export default function PiecesScreen() {
                       },
                     ]}
                   >
-                    {([outfit.top, outfit.bottom, outfit.shoes] as const).map((pieceId, rank) => {
+                    {/*
+                      La vignette est la même toile, en réduction : les calques y
+                      sont positionnés par les mêmes fractions. Seule différence,
+                      la composition y est recentrée.
+                    */}
+                    {OUTFIT_SLOTS.map((slot, rank) => {
+                      const pieceId = outfit[slot.key];
                       const piece = pieceId ? pieceById.get(pieceId) : undefined;
+                      if (!piece) return null;
 
                       return (
-                        <View key={rank} style={styles.outfitPart}>
-                          {piece ? (
-                            <Image
-                              source={{ uri: piece.uri }}
-                              style={[
-                                styles.outfitPartPhoto,
-                                { transform: [{ scale: piece.scale }] },
-                              ]}
-                              resizeMode="contain"
-                            />
-                          ) : null}
-                        </View>
+                        <GarmentLayer
+                          key={slot.key}
+                          pieces={[piece]}
+                          index={0}
+                          slot={rank}
+                          canvas={{ width: outfitCardWidth, height: outfitCardHeight }}
+                          layout={centered[slot.key] ?? piece.layout}
+                          interactive={false}
+                        />
                       );
                     })}
 
@@ -375,7 +496,8 @@ export default function PiecesScreen() {
                       </Text>
                     </Pressable>
                   </Pressable>
-                ))}
+                  );
+                })}
               </View>
             </ScrollView>
           )}
@@ -385,6 +507,8 @@ export default function PiecesScreen() {
           outfit={viewing}
           pieces={pieceById}
           onToggleFavorite={toggleFavorite}
+          onChangePieces={changeOutfitPieces}
+          onResetFraming={resetOutfitFraming}
           onDelete={confirmRemoveOutfit}
           onClose={() => setViewing(null)}
         />
@@ -486,7 +610,11 @@ export default function PiecesScreen() {
         <View style={[styles.busy, { gap: spacing.sm, paddingVertical: spacing.sm }]}>
           <ActivityIndicator color={colors.primary} />
           <Text style={[typography.caption, { color: colors.textMuted }]}>
-            {status === 'cutout' ? 'Détourage en cours…' : 'Enregistrement…'}
+            {status === 'cutout'
+              ? 'Détourage en cours…'
+              : status === 'trimming'
+                ? 'Rognage des marges…'
+                : 'Enregistrement…'}
           </Text>
         </View>
       )}
@@ -554,16 +682,17 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   outfitSaved: {
+    /*
+      La vignette rogne, contrairement à la toile du composeur et de la vue
+      agrandie. Ce n'est pas l'« entre-deux » qu'on a supprimé : là-bas, chaque
+      vêtement avait sa propre boîte, ce qui bornait le déplacement. Ici, c'est
+      le bord de la carte, commun aux trois calques — sans lui, un vêtement
+      agrandi déborde sur les cartes voisines de la grille.
+    */
     overflow: 'hidden',
     padding: 6,
   },
-  /** Les trois postes se partagent la hauteur de la carte, de haut en bas. */
-  outfitPart: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outfitPartPhoto: { width: '100%', height: '100%' },
+
   outfitSeason: {
     position: 'absolute',
     top: 6,

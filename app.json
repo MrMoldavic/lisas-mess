@@ -17,7 +17,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "single"
     },
     "plugins": [
       "expo-router",
@@ -28,7 +28,8 @@
           "cameraPermission": "Lisa's Mess utilise l'appareil photo pour ajouter un vêtement à ta garde-robe.",
           "photosPermission": "Lisa's Mess accède à tes photos pour importer un vêtement existant."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

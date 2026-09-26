@@ -101,11 +101,31 @@ export function familyForCategory(id: string | null): Family | null {
   return findCategory(id)?.family ?? null;
 }
 
-/** Les trois postes qui composent une tenue, dans l'ordre d'affichage. */
+/**
+ * Les trois postes qui composent une tenue, dans l'ordre d'affichage.
+ *
+ * `anchor` est le bord de sa zone contre lequel le vêtement est collé : celui qui
+ * touche la taille (ou le bas, pour les chaussures). Il ne dépend donc plus des
+ * proportions de la photo.
+ *
+ * `share` est la part de la hauteur de la toile réservée au poste, calquée sur
+ * les proportions d'un corps : des parts égales donneraient aux chaussures autant
+ * de place qu'à un pantalon, et une paire photographiée de profil s'étalerait sur
+ * toute la largeur. La somme doit faire 1.
+ *
+ * `tilt` est le sens d'inclinaison du sticker : 1 penche à droite (sens horaire),
+ * -1 à gauche. Les postes alternent, comme des autocollants collés à la main.
+ */
 export const OUTFIT_SLOTS = [
-  { key: 'top', label: 'Haut', family: 'top' },
-  { key: 'bottom', label: 'Bas', family: 'bottom' },
-  { key: 'shoes', label: 'Chaussures', family: 'shoes' },
+  { key: 'top', label: 'Haut', family: 'top', anchor: 'end', share: 0.38, tilt: 1 },
+  { key: 'bottom', label: 'Bas', family: 'bottom', anchor: 'start', share: 0.47, tilt: -1 },
+  { key: 'shoes', label: 'Chaussures', family: 'shoes', anchor: 'start', share: 0.15, tilt: 1 },
 ] as const;
+
+/** Zone verticale d'un poste, en fraction de la hauteur de la toile. */
+export function slotBand(rank: number): { start: number; share: number } {
+  const start = OUTFIT_SLOTS.slice(0, rank).reduce((sum, slot) => sum + slot.share, 0);
+  return { start, share: OUTFIT_SLOTS[rank]?.share ?? 0 };
+}
 
 export type OutfitSlot = (typeof OUTFIT_SLOTS)[number]['key'];
