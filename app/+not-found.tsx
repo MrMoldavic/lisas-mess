@@ -11,8 +11,8 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ title: 'Oups' }} />
       <View style={[styles.container, { backgroundColor: colors.background, gap: spacing.sm }]}>
         <Text style={[typography.heading, { color: colors.text }]}>Cette page n&apos;existe pas.</Text>
-        <Link href="/" style={[typography.body, { color: colors.primary }]}>
-          Retour à l&apos;accueil
+        <Link href="/atelier" style={[typography.body, { color: colors.primary }]}>
+          Retour à l&apos;atelier
         </Link>
       </View>
     </>

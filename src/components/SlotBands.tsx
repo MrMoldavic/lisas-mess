@@ -1,6 +1,7 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/hooks/useTheme';
+import { fonts } from '@/theme';
 import type { ColorName } from '@/theme';
 import { OUTFIT_SLOTS, slotBand } from '@/types';
 import type { OutfitSlot } from '@/types';
@@ -13,14 +14,27 @@ const SOFT_COLORS: Record<OutfitSlot, ColorName> = {
   shoes: 'shoesSoft',
 };
 
-const GAP = 6;
+const GAP = 9;
+
+/** Rayon d'un coupon : presque droit, comme un morceau de tissu coupé. */
+export const BAND_RADIUS = 6;
+
+/** Pas des dents du bord cranté (ciseaux à cranter), en points. */
+const TOOTH = 6;
+
+/**
+ * Les coupons restent clairs dans les deux thèmes : leur encre (couture,
+ * étiquette) est donc fixe, et non tirée du thème.
+ */
+const FABRIC_INK = '#4A3A33';
+const SEAM = 'rgba(74, 58, 51, 0.28)';
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
 /**
  * Encart d'un poste sur la toile : sa zone (`slotBand`), moins un petit écart
  * entre deux encarts. Partagé avec `GarmentLayer`, qui y enferme le vêtement :
- * le fond pastel et la zone autorisée coïncident ainsi au pixel près.
+ * le coupon et la zone autorisée coïncident ainsi au pixel près.
  */
 export function bandRect(rank: number, canvas: Canvas): Rect {
   const band = slotBand(rank);
@@ -32,36 +46,99 @@ export function bandRect(rank: number, canvas: Canvas): Rect {
   return { x: 0, y, width: canvas.width, height: Math.max(0, height) };
 }
 
-/** Fonds pastel des postes, à poser sous les `GarmentLayer` de la même toile. */
+/**
+ * Coupons de tissu des postes, à poser sous les `GarmentLayer` de la même toile :
+ * couture pointillée, étiquette cousue, et bord inférieur cranté
+ * (sauf le dernier, posé sur le fond).
+ */
 export function SlotBands({ canvas }: { canvas: Canvas }) {
-  const { colors, radius } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {OUTFIT_SLOTS.map((slot, rank) => {
         const rect = bandRect(rank, canvas);
+        const fabric = colors[SOFT_COLORS[slot.key]];
+        const pinked = rank < OUTFIT_SLOTS.length - 1;
+        // Le coupon des chaussures est trop bas pour porter une étiquette lisible.
+        const labelled = slot.key !== 'shoes';
 
         return (
           <View
             key={slot.key}
             style={[
               styles.band,
-              {
-                left: rect.x,
-                top: rect.y,
-                width: rect.width,
-                height: rect.height,
-                backgroundColor: colors[SOFT_COLORS[slot.key]],
-                borderRadius: radius.md,
-              },
+              { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
             ]}
-          />
+          >
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: fabric, borderRadius: BAND_RADIUS }]} />
+
+            {pinked && (
+              <View style={styles.pinking}>
+                {Array.from({ length: Math.ceil(rect.width / TOOTH) }, (_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.tooth, { left: i * TOOTH + TOOTH / 2 - TOOTH_SIDE / 2, backgroundColor: fabric }]}
+                  />
+                ))}
+              </View>
+            )}
+
+            <View style={styles.seam} />
+
+            {labelled && (
+              <View style={styles.label}>
+                <View style={[styles.labelHole, { backgroundColor: fabric }]} />
+                <Text style={styles.labelText}>{slot.label.toUpperCase()}</Text>
+              </View>
+            )}
+          </View>
         );
       })}
     </View>
   );
 }
 
+/** Côté du carré tourné à 45° dont la diagonale fait une dent. */
+const TOOTH_SIDE = TOOTH / Math.SQRT2;
+
 const styles = StyleSheet.create({
   band: { position: 'absolute' },
+  pinking: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 0 },
+  tooth: {
+    position: 'absolute',
+    top: -TOOTH_SIDE / 2,
+    width: TOOTH_SIDE,
+    height: TOOTH_SIDE,
+    transform: [{ rotate: '45deg' }],
+  },
+  seam: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    right: 4,
+    bottom: 4,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: SEAM,
+    borderRadius: 4,
+  },
+  label: {
+    position: 'absolute',
+    top: 9,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    paddingLeft: 4,
+    paddingRight: 8,
+    paddingVertical: 2,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    borderTopRightRadius: 7,
+    borderBottomRightRadius: 7,
+  },
+  labelHole: { width: 4, height: 4, borderRadius: 2 },
+  labelText: { fontFamily: fonts.heading, fontSize: 10, letterSpacing: 0.8, color: FABRIC_INK },
 });

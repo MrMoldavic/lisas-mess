@@ -9,7 +9,9 @@ import {
   setPieceLayout,
 } from './pieceLayouts';
 import type { PieceLayout } from './pieceLayouts';
-import { renamePieceInOutfits } from './outfits';
+import { forgetPiece, renamePieceInOutfits } from './outfits';
+import { clearVerdict, countGiven, listVerdicts, moveVerdict } from './sorting';
+import type { Verdict } from './sorting';
 import { trimTransparentMargins } from './trim';
 
 /**
@@ -36,7 +38,14 @@ export type Piece = {
   category: CategoryId | null;
   /** Cadrage d'affichage : taille et position, neutres si jamais ajustés. */
   layout: PieceLayout;
+  /** Décision du tri, `null` si la pièce n'est jamais passée au tri. */
+  verdict: Verdict | null;
 };
+
+/** La pièce est dans la caisse « À donner » : plus proposée pour créer des tenues. */
+export function isInCrate(piece: Piece): boolean {
+  return piece.verdict === 'donate';
+}
 
 function ensureDirectory(): void {
   if (!PIECES_DIRECTORY.exists) {
@@ -64,7 +73,8 @@ function buildFileName(category: CategoryId | null, extension: string): string {
  */
 function toPiece(
   file: File,
-  layouts: Record<string, PieceLayout> = listLayouts()
+  layouts: Record<string, PieceLayout> = listLayouts(),
+  verdicts: Record<string, Verdict> = listVerdicts()
 ): Piece {
   return {
     id: file.name,
@@ -73,6 +83,7 @@ function toPiece(
     uri: file.modificationTime ? `${file.uri}?v=${file.modificationTime}` : file.uri,
     category: parseCategory(file.name),
     layout: layouts[file.name] ?? DEFAULT_LAYOUT,
+    verdict: verdicts[file.name] ?? null,
   };
 }
 
@@ -81,10 +92,11 @@ export function listPieces(): Piece[] {
   ensureDirectory();
 
   const layouts = listLayouts();
+  const verdicts = listVerdicts();
 
   return PIECES_DIRECTORY.list()
     .filter((entry): entry is File => entry instanceof File)
-    .map((file) => toPiece(file, layouts))
+    .map((file) => toPiece(file, layouts, verdicts))
     .sort((a, b) => b.id.localeCompare(a.id));
 }
 
@@ -164,6 +176,7 @@ export function setPieceCategory(id: string, category: CategoryId | null): Piece
 
     // Même raison pour les tenues : elles désignent la pièce par son nom de fichier.
     renamePieceInOutfits(id, name);
+    moveVerdict(id, name);
   }
 
   return toPiece(new File(PIECES_DIRECTORY, name));
@@ -223,7 +236,20 @@ export function removePiece(id: string): void {
   if (file.exists) {
     file.delete();
   }
-  // Sans ça, l'échelle survivrait à la photo et serait réattribuée par erreur
-  // à une future pièce portant le même nom.
+  // Sans ça, l'échelle et le verdict survivraient à la photo et seraient
+  // réattribués par erreur à une future pièce portant le même nom.
   forgetPieceLayout(id);
+  clearVerdict(id);
+}
+
+/**
+ * La pièce a été donnée : elle quitte la garde-robe (photo effacée, retirée des
+ * tenues), et le compteur des pièces données avance — c'est lui qui rapporte
+ * des boutons, pour qu'on ne puisse pas en gagner en sortant puis remettant une
+ * pièce dans la caisse.
+ */
+export function givePiece(id: string): void {
+  removePiece(id);
+  forgetPiece(id);
+  countGiven();
 }

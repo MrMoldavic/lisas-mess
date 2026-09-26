@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/hooks/useTheme';
+import { fonts } from '@/theme';
 
 /** Les deux grandes vues de la garde-robe. */
 export type Mode = 'pieces' | 'outfits';
@@ -67,7 +68,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 17,
-    fontWeight: '700',
+    fontFamily: fonts.heading,
     letterSpacing: 0.2,
   },
 });

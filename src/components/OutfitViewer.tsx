@@ -5,12 +5,14 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/hooks/useTheme';
-import { DEFAULT_LAYOUT } from '@/services';
+import { fonts } from '@/theme';
+import { DEFAULT_LAYOUT, isInCrate } from '@/services';
 import type { Outfit, Piece } from '@/services';
 import { OUTFIT_SLOTS, colorNameForSeason, familyForCategory, findSeason } from '@/types';
 import type { OutfitSlot, SeasonId } from '@/types';
 
 import { GarmentLayer } from './GarmentLayer';
+import { Relief } from './Button';
 import { SlotBands } from './SlotBands';
 
 type Selection = Record<OutfitSlot, string | null>;
@@ -82,6 +84,8 @@ export function OutfitViewer({
     const groups = { top: [], bottom: [], shoes: [] } as Record<OutfitSlot, Piece[]>;
 
     for (const piece of pieces.values()) {
+      // Une pièce de la caisse « À donner » n'est plus proposée en modification.
+      if (isInCrate(piece)) continue;
       const family = familyForCategory(piece.category);
       if (family === 'top' || family === 'bottom' || family === 'shoes') {
         groups[family].push(piece);
@@ -265,27 +269,20 @@ type CircleButtonProps = {
 
 /** Bulle ronde de la barre du haut. */
 function CircleButton({ icon, label, onPress, selected = false }: CircleButtonProps) {
-  const { colors, radius } = useTheme();
+  const { radius } = useTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Relief
+      tone={selected ? 'primary' : 'surface'}
+      onPress={onPress}
+      borderRadius={radius.full}
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       hitSlop={6}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.circle,
-        {
-          borderRadius: radius.full,
-          backgroundColor: selected ? colors.primary : colors.surface,
-          borderColor: selected ? colors.primary : colors.border,
-          transform: [{ scale: pressed ? 0.9 : 1 }],
-        },
-      ]}
+      faceStyle={styles.circle}
     >
-      <Ionicons name={icon} size={22} color={selected ? colors.onPrimary : colors.text} />
-    </Pressable>
+      {(ink) => <Ionicons name={icon} size={22} color={ink} />}
+    </Relief>
   );
 }
 
@@ -298,27 +295,23 @@ type PillButtonProps = {
 
 /** Pastille de texte, pour les deux choix du mode modification. */
 function PillButton({ label, onPress, icon, primary = false }: PillButtonProps) {
-  const { colors, radius } = useTheme();
-  const ink = primary ? colors.onPrimary : colors.text;
+  const { radius } = useTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      hitSlop={6}
+    <Relief
+      tone={primary ? 'primary' : 'surface'}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.pill,
-        {
-          borderRadius: radius.full,
-          backgroundColor: primary ? colors.primary : colors.surface,
-          borderColor: primary ? colors.primary : colors.border,
-          transform: [{ scale: pressed ? 0.94 : 1 }],
-        },
-      ]}
+      borderRadius={radius.full}
+      hitSlop={6}
+      faceStyle={styles.pill}
     >
-      {icon && <Ionicons name={icon} size={16} color={ink} />}
-      <Text style={[styles.pillLabel, { color: ink }]}>{label}</Text>
-    </Pressable>
+      {(ink) => (
+        <>
+          {icon && <Ionicons name={icon} size={16} color={ink} />}
+          <Text style={[styles.pillLabel, { color: ink }]}>{label}</Text>
+        </>
+      )}
+    </Relief>
   );
 }
 
@@ -360,7 +353,6 @@ const styles = StyleSheet.create({
   circle: {
     width: 46,
     height: 46,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -368,11 +360,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  pillLabel: { fontSize: 15, fontWeight: '700' },
+  pillLabel: { fontSize: 15, fontFamily: fonts.heading },
   season: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -380,7 +371,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
-  seasonLabel: { fontSize: 14, fontWeight: '700' },
+  seasonLabel: { fontSize: 14, fontFamily: fonts.heading },
   silhouette: { flex: 1 },
   hint: {
     alignSelf: 'center',
@@ -406,5 +397,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dockLabel: { fontWeight: '600' },
+  dockLabel: { fontFamily: fonts.heading },
 });

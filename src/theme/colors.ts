@@ -1,26 +1,48 @@
 /**
- * Palette de l'application : crème chaud en clair, prune profond en sombre,
- * avec une couleur dédiée par catégorie de pièce (hauts / bas / chaussures)
- * réutilisée dans toute l'app pour rendre le tri lisible d'un coup d'œil.
+ * Palette « atelier » : toile de lin et bois en clair, atelier le soir (brun
+ * profond) en sombre. Trois couleurs vives portent l'interface — framboise,
+ * canard, moutarde —, chacune avec sa version foncée (`…Deep`) qui dessine
+ * l'ombre pleine des boutons en relief.
+ *
+ * Les familles de pièces (hauts / bas / chaussures) gardent chacune leur
+ * couleur, réutilisée dans toute l'app pour rendre le tri lisible d'un coup d'œil.
  */
 export const palette = {
-  background: { light: '#FFF7F2', dark: '#161114' },
-  surface: { light: '#FFFFFF', dark: '#221A1E' },
-  surfaceAlt: { light: '#FDEEE7', dark: '#2C2126' },
-  border: { light: '#F2DED4', dark: '#3A2C32' },
-  text: { light: '#241C1A', dark: '#F8F0ED' },
-  textMuted: { light: '#8C7A72', dark: '#A89490' },
-  primary: { light: '#E0466B', dark: '#FF7A9C' },
-  onPrimary: { light: '#FFFFFF', dark: '#2B0C17' },
+  background: { light: '#F6EBDA', dark: '#221A16' },
+  surface: { light: '#FFF9F0', dark: '#30251F' },
+  surfaceAlt: { light: '#EFE0C8', dark: '#3B2E26' },
+  border: { light: '#E6D3B7', dark: '#4B3B31' },
+  text: { light: '#4A3A33', dark: '#F6EADB' },
+  textMuted: { light: '#8A7263', dark: '#B9A08C' },
+  // Framboise : action principale.
+  primary: { light: '#E4577E', dark: '#EC6189' },
+  primaryDeep: { light: '#BC3D61', dark: '#B03F62' },
+  onPrimary: { light: '#FFFFFF', dark: '#FFFFFF' },
+  // Canard : action secondaire (tirage au sort, navigation).
+  secondary: { light: '#36A89F', dark: '#3DB5AB' },
+  secondaryDeep: { light: '#257C75', dark: '#257C75' },
+  onSecondary: { light: '#FFFFFF', dark: '#FFFFFF' },
+  // Moutarde : défis et récompenses.
+  accent: { light: '#EDB847', dark: '#F0C25A' },
+  accentDeep: { light: '#C7922A', dark: '#B98A26' },
+  onAccent: { light: '#5A3E0C', dark: '#4A320A' },
+  // Bois : enseignes et étagères.
+  wood: { light: '#C48A57', dark: '#A8733F' },
+  woodDeep: { light: '#8E5C33', dark: '#6E4523' },
+  onWood: { light: '#FFF4E2', dark: '#FFF1DC' },
+  /** Ombre pleine des éléments posés sur le fond (cartes, bulles, flèches). */
+  surfaceDeep: { light: '#E6D3B7', dark: '#16100D' },
+  /** Couture pointillée des cartes et des coupons. */
+  stitch: { light: '#D8A56D', dark: '#8F6A45' },
   onHero: { light: '#FFFFFF', dark: '#FDECEF' },
-  top: { light: '#F4845F', dark: '#FF9B74' },
-  bottom: { light: '#5B8FF9', dark: '#7FA9FF' },
-  shoes: { light: '#E0A32E', dark: '#FFC96B' },
-  // Fonds pastel des postes du composeur. Ils restent clairs en mode sombre, à
-  // peine atténués : c'est ce qui garde une pièce noire lisible dessus.
-  topSoft: { light: '#FFE1D5', dark: '#EBCFC4' },
-  bottomSoft: { light: '#DCE7FF', dark: '#C7D3EC' },
-  shoesSoft: { light: '#FFEFCB', dark: '#EBDDB9' },
+  top: { light: '#F28C6B', dark: '#FF9B7A' },
+  bottom: { light: '#4F9BD1', dark: '#7DB8E6' },
+  shoes: { light: '#D9A232', dark: '#F0C25A' },
+  // Coupons de tissu des postes du composeur. Ils restent clairs en mode
+  // sombre, à peine atténués : c'est ce qui garde une pièce noire lisible dessus.
+  topSoft: { light: '#FFD4C2', dark: '#EBC5B6' },
+  bottomSoft: { light: '#C6E6F5', dark: '#B5D3E1' },
+  shoesSoft: { light: '#F8E2A6', dark: '#E5D09A' },
   // Saisons : teintes franchement distinctes de celles des familles ci-dessus,
   // car les deux jeux de pilules se ressemblent visuellement.
   spring: { light: '#3FA46A', dark: '#6FD49F' },
@@ -43,8 +65,8 @@ export function colorsFor(scheme: ColorScheme): Colors {
 /** Dégradés de l'app. Le tuple est figé car LinearGradient exige au moins 2 couleurs. */
 export const gradients = {
   hero: {
-    light: ['#FF9FBE', '#E0466B', '#F4845F'],
-    dark: ['#6E2242', '#A83657', '#B85C46'],
+    light: ['#FFB592', '#E4577E', '#C48A57'],
+    dark: ['#7A2E45', '#A8435E', '#7A5231'],
   },
 } as const;
 

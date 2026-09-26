@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { useTheme } from '@/hooks/useTheme';
+import { fonts } from '@/theme';
 
 export type PillEntry<T extends string> = {
   key: T;
@@ -82,6 +83,6 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fonts.heading,
   },
 });

@@ -1,4 +1,5 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -16,15 +17,16 @@ import {
 import {
   Button,
   CategoryPills,
-  CategorySheet,
   ModeSwitch,
+  OutfitThumbnail,
   OutfitViewer,
-  GarmentLayer,
+  PieceViewer,
   Screen,
   SeasonPills,
 } from '@/components';
 import type { CategoryFilter, Mode, SeasonFilter } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
+import { fonts } from '@/theme';
 import {
   addPiece,
   addPieceFromUrl,
@@ -36,6 +38,11 @@ import {
   removeOutfit,
   removePiece,
   setPieceCategory,
+  setVerdict,
+  givePiece,
+  isInCrate,
+  usageCounts,
+  BUTTONS_PER_GIVEN,
   clearOutfitLayouts,
   toggleOutfitFavorite,
   updateOutfitPieces,
@@ -44,9 +51,8 @@ import {
   trimExistingPieces,
   resetOutfitScalesFor,
 } from '@/services';
-import type { Outfit, Piece, PieceLayout } from '@/services';
+import type { Outfit, Piece } from '@/services';
 import {
-  OUTFIT_SLOTS,
   colorNameForCategory,
   colorNameForSeason,
   findCategory,
@@ -61,52 +67,6 @@ const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
 };
 
 type Status = null | 'saving' | 'cutout' | 'trimming';
-
-/**
- * Recentre une composition pour son affichage en vignette.
- *
- * En composant une tenue, on déplace souvent les trois vêtements dans la même
- * direction pour les faire tenir ensemble ; la composition finit alors décalée
- * sur la toile. Retirer à chaque calque le décalage **moyen** du groupe ramène
- * son centre de gravité au milieu de la carte, sans changer les écarts entre
- * les vêtements — c'est-à-dire sans toucher à la composition elle-même.
- *
- * C'est une moyenne des positions, pas un vrai cadre englobant : les dimensions
- * réellement dessinées dépendent des proportions de chaque photo, qu'on ne
- * connaît pas ici. L'approximation suffit tant que les trois vêtements occupent
- * des hauteurs comparables.
- *
- * Volontairement limité à la vignette : le composeur et la vue agrandie
- * montrent la tenue telle qu'elle a été réglée.
- */
-function centeredLayouts(
-  outfit: Outfit,
-  pieceById: Map<string, Piece>
-): Partial<Record<OutfitSlot, PieceLayout>> {
-  const resolved = OUTFIT_SLOTS.flatMap((slot) => {
-    const pieceId = outfit[slot.key];
-    const piece = pieceId ? pieceById.get(pieceId) : undefined;
-    if (!piece) return [];
-
-    return [{ key: slot.key, layout: outfit.layouts[slot.key] ?? piece.layout }];
-  });
-
-  if (resolved.length === 0) return {};
-
-  const meanX = resolved.reduce((sum, e) => sum + e.layout.offsetX, 0) / resolved.length;
-  const meanY = resolved.reduce((sum, e) => sum + e.layout.offsetY, 0) / resolved.length;
-
-  return Object.fromEntries(
-    resolved.map((entry) => [
-      entry.key,
-      {
-        ...entry.layout,
-        offsetX: entry.layout.offsetX - meanX,
-        offsetY: entry.layout.offsetY - meanY,
-      },
-    ])
-  );
-}
 
 /**
  * Quatre cartes visibles d'un coup — la carte « + » plus trois tenues — donc
@@ -125,12 +85,15 @@ export default function PiecesScreen() {
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   /** Tenue affichée en grand, `null` si la vue est fermée. */
   const [viewing, setViewing] = useState<Outfit | null>(null);
-  const [mode, setMode] = useState<Mode>('pieces');
-  const [filter, setFilter] = useState<CategoryFilter>('all');
+  // `?mode=outfits` (tiroir « Mes tenues » de l'accueil) ouvre directement sur les tenues.
+  // `?filter=crate` (fin du tri) : ouvre directement sur la caisse « À donner ».
+  const params = useLocalSearchParams<{ mode?: string; filter?: string }>();
+  const [mode, setMode] = useState<Mode>(params.mode === 'outfits' ? 'outfits' : 'pieces');
+  const [filter, setFilter] = useState<CategoryFilter>(params.filter === 'crate' ? 'crate' : 'all');
   const [seasonFilter, setSeasonFilter] = useState<SeasonFilter>('all');
   const [status, setStatus] = useState<Status>(null);
   /** Pièce dont on est en train de choisir la catégorie. */
-  const [editing, setEditing] = useState<Piece | null>(null);
+  const [detail, setDetail] = useState<Piece | null>(null);
 
   const router = useRouter();
 
@@ -243,15 +206,34 @@ export default function PiecesScreen() {
     [pieces]
   );
 
+  const crateCount = useMemo(() => pieces.filter(isInCrate).length, [pieces]);
+  const usage = useMemo(() => usageCounts(outfits), [outfits]);
+
+  // La caisse a son propre filtre : ailleurs, ses pièces n'apparaissent pas.
   const visible = useMemo(() => {
-    if (filter === 'all') return pieces;
-    if (filter === 'unclassified') return pieces.filter((piece) => piece.category === null);
-    return pieces.filter((piece) => piece.category === filter);
+    if (filter === 'crate') return pieces.filter(isInCrate);
+    const kept = pieces.filter((piece) => !isInCrate(piece));
+    if (filter === 'all') return kept;
+    if (filter === 'unclassified') return kept.filter((piece) => piece.category === null);
+    return kept.filter((piece) => piece.category === filter);
   }, [pieces, filter]);
+
+  // La caisse vidée, son filtre disparaît : on revient à « Tout ».
+  useEffect(() => {
+    if (filter === 'crate' && crateCount === 0) setFilter('all');
+  }, [crateCount, filter]);
+
+  /** Relit la garde-robe et remet à jour la pièce affichée en grand. */
+  const refresh = useCallback((focusId?: string) => {
+    const next = listPieces();
+    setPieces(next);
+    setOutfits(listOutfits());
+    if (focusId !== undefined) setDetail(next.find((piece) => piece.id === focusId) ?? null);
+  }, []);
 
   /** La pilule sélectionnée classe la prochaine photo ; « Tout » la laisse à classer. */
   const categoryForNewPiece: CategoryId | null =
-    filter === 'all' || filter === 'unclassified' ? null : filter;
+    filter === 'all' || filter === 'unclassified' || filter === 'crate' ? null : filter;
 
   const importImage = useCallback(
     async (source: 'camera' | 'library') => {
@@ -308,16 +290,51 @@ export default function PiecesScreen() {
   const classify = useCallback(
     (piece: Piece, category: CategoryId | null) => {
       try {
-        setPieceCategory(piece.id, category);
-        setOutfits(listOutfits());
-        setPieces(listPieces());
+        // Reclasser renomme le fichier : la pièce affichée change d'identifiant.
+        const renamed = setPieceCategory(piece.id, category);
+        refresh(renamed.id);
       } catch (error) {
         Alert.alert('Classement impossible', String(error));
-      } finally {
-        setEditing(null);
       }
     },
-    []
+    [refresh]
+  );
+
+  const sortPiece = useCallback(
+    (piece: Piece) => {
+      setVerdict(piece.id, 'donate');
+      refresh(piece.id);
+    },
+    [refresh]
+  );
+
+  const keepPiece = useCallback(
+    (piece: Piece) => {
+      setVerdict(piece.id, 'keep');
+      refresh(piece.id);
+    },
+    [refresh]
+  );
+
+  const confirmGive = useCallback(
+    (piece: Piece) => {
+      Alert.alert(
+        "C'est donné ?",
+        `La pièce quitte ta garde-robe et ses tenues. +${BUTTONS_PER_GIVEN} boutons dans ton bocal.`,
+        [
+          { text: 'Pas encore', style: 'cancel' },
+          {
+            text: "C'est donné !",
+            onPress: () => {
+              givePiece(piece.id);
+              setDetail(null);
+              refresh();
+            },
+          },
+        ]
+      );
+    },
+    [refresh]
   );
 
   const confirmRemove = useCallback((piece: Piece) => {
@@ -330,6 +347,7 @@ export default function PiecesScreen() {
           removePiece(piece.id);
           // Sans ça, les tenues garderaient une référence vers une photo effacée.
           forgetPiece(piece.id);
+          setDetail(null);
           setPieces(listPieces());
           setOutfits(listOutfits());
         },
@@ -407,8 +425,6 @@ export default function PiecesScreen() {
                 </Pressable>
 
                 {visibleOutfits.map((outfit) => {
-                  const centered = centeredLayouts(outfit, pieceById);
-
                   return (
                   <Pressable
                     key={outfit.id}
@@ -426,28 +442,13 @@ export default function PiecesScreen() {
                       },
                     ]}
                   >
-                    {/*
-                      La vignette est la même toile, en réduction : les calques y
-                      sont positionnés par les mêmes fractions. Seule différence,
-                      la composition y est recentrée.
-                    */}
-                    {OUTFIT_SLOTS.map((slot, rank) => {
-                      const pieceId = outfit[slot.key];
-                      const piece = pieceId ? pieceById.get(pieceId) : undefined;
-                      if (!piece) return null;
-
-                      return (
-                        <GarmentLayer
-                          key={slot.key}
-                          pieces={[piece]}
-                          index={0}
-                          slot={rank}
-                          canvas={{ width: outfitCardWidth, height: outfitCardHeight }}
-                          layout={centered[slot.key] ?? piece.layout}
-                          interactive={false}
-                        />
-                      );
-                    })}
+                    {/* La toile du composeur, en réduction : mêmes proportions, même cadrage. */}
+                    <OutfitThumbnail
+                      outfit={outfit}
+                      pieces={pieceById}
+                      width={outfitCardWidth}
+                      height={outfitCardHeight}
+                    />
 
                     {/*
                       Badge posé seulement si la tenue porte une saison : une
@@ -521,7 +522,12 @@ export default function PiecesScreen() {
       <ModeSwitch selected={mode} onSelect={setMode} />
 
       <View style={{ paddingTop: spacing.sm }}>
-        <CategoryPills selected={filter} onSelect={setFilter} showUnclassified={hasUnclassified} />
+        <CategoryPills
+          selected={filter}
+          onSelect={setFilter}
+          showUnclassified={hasUnclassified}
+          showCrate={crateCount > 0}
+        />
       </View>
 
       <FlatList
@@ -541,7 +547,9 @@ export default function PiecesScreen() {
             <Text style={[typography.body, { color: colors.textMuted }]}>
               {selectedCategory
                 ? `La prochaine photo sera classée dans « ${selectedCategory.label} ».`
-                : 'Appuie sur une pièce pour la classer, ou choisis une catégorie avant de photographier.'}
+                : filter === 'crate'
+                  ? 'Les pièces que tu as triées. Appuie sur une pièce pour la donner ou la garder.'
+                  : 'Appuie sur une pièce pour la voir en grand, la classer ou la trier.'}
             </Text>
           </View>
         }
@@ -570,7 +578,7 @@ export default function PiecesScreen() {
 
           return (
             <Pressable
-              onPress={() => setEditing(item)}
+              onPress={() => setDetail(item)}
               onLongPress={() => confirmRemove(item)}
               style={({ pressed }) => [
                 styles.tile,
@@ -620,25 +628,30 @@ export default function PiecesScreen() {
       )}
 
       <View style={{ gap: spacing.sm, paddingTop: spacing.sm }}>
-        <Button label="Prendre en photo" onPress={() => importImage('camera')} disabled={busy} />
+        <Button
+          label="Prendre en photo"
+          icon={(ink) => <Ionicons name="camera" size={20} color={ink} />}
+          onPress={() => importImage('camera')}
+          disabled={busy}
+        />
         <Button
           label="Importer depuis mes photos"
-          variant="secondary"
+          variant="surface"
+          icon={(ink) => <Ionicons name="images" size={20} color={ink} />}
           onPress={() => importImage('library')}
           disabled={busy}
         />
       </View>
 
-      <CategorySheet
-        visible={editing !== null}
-        current={editing?.category ?? null}
-        onSelect={(category) => editing && classify(editing, category)}
-        onDelete={() => {
-          const piece = editing;
-          setEditing(null);
-          if (piece) confirmRemove(piece);
-        }}
-        onClose={() => setEditing(null)}
+      <PieceViewer
+        piece={detail}
+        usage={detail ? usage.get(detail.id) ?? 0 : 0}
+        onClassify={classify}
+        onSort={sortPiece}
+        onKeep={keepPiece}
+        onGive={confirmGive}
+        onDelete={confirmRemove}
+        onClose={() => setDetail(null)}
       />
     </Screen>
   );
@@ -661,7 +674,7 @@ const styles = StyleSheet.create({
     bottom: 4,
     paddingVertical: 3,
   },
-  badgeLabel: { fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  badgeLabel: { fontSize: 10, fontFamily: fonts.bodyBold, textAlign: 'center' },
   empty: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -700,7 +713,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  outfitSeasonLabel: { fontSize: 10, fontWeight: '700' },
+  outfitSeasonLabel: { fontSize: 10, fontFamily: fonts.bodyBold },
   outfitStar: {
     position: 'absolute',
     top: 4,

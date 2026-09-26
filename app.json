@@ -5,7 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "lisasmess",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F6EBDA",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,

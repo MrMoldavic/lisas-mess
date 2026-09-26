@@ -1,5 +1,3 @@
-import { useColorScheme } from 'react-native';
-
 import { colorsFor, gradientsFor, radius, spacing, typography } from '@/theme';
 import type { Colors, ColorScheme, Gradient, GradientName } from '@/theme';
 
@@ -13,18 +11,26 @@ export type Theme = {
 };
 
 /**
- * Point d'entrée unique pour le style : suit le thème système et renvoie la
- * palette résolue ainsi que les échelles d'espacement / typographie.
+ * L'atelier est toujours en thème clair : la toile de lin fait l'identité de
+ * l'app, et le mode sombre du système la rendait grise. Le thème système n'est
+ * donc **pas** suivi (voir aussi `userInterfaceStyle: "light"` dans app.json,
+ * qui fige les éléments natifs : alertes, sélecteur de photos).
+ *
+ * Les variantes sombres de la palette restent définies : rebrancher
+ * `useColorScheme()` ici suffirait à réactiver le mode sombre.
  */
-export function useTheme(): Theme {
-  const scheme: ColorScheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+const SCHEME: ColorScheme = 'light';
 
-  return {
-    scheme,
-    colors: colorsFor(scheme),
-    gradients: gradientsFor(scheme),
-    spacing,
-    radius,
-    typography,
-  };
+const THEME: Theme = {
+  scheme: SCHEME,
+  colors: colorsFor(SCHEME),
+  gradients: gradientsFor(SCHEME),
+  spacing,
+  radius,
+  typography,
+};
+
+/** Point d'entrée unique pour le style : palette résolue et échelles. */
+export function useTheme(): Theme {
+  return THEME;
 }

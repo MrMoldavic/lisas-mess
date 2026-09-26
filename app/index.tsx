@@ -1,160 +1,148 @@
-import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import type { DimensionValue } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View, useAnimatedValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Reveal } from '@/components';
+import { Button, Reveal, SewingButton } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
 import type { ColorName } from '@/theme';
+import { fonts } from '@/theme';
 
-/** Les trois familles de pièces qui composent une tenue. */
-const CATEGORIES: { emoji: string; label: string; color: ColorName; rotate: string }[] = [
-  { emoji: '👕', label: 'Hauts', color: 'top', rotate: '-9deg' },
-  { emoji: '👖', label: 'Bas', color: 'bottom', rotate: '3deg' },
-  { emoji: '👟', label: 'Chaussures', color: 'shoes', rotate: '11deg' },
+type Spinner = {
+  top: DimensionValue;
+  left: DimensionValue;
+  size: number;
+  color: ColorName;
+  /** Couleur des trous ; à défaut, une ombre neutre. */
+  holes?: ColorName;
+  /** Durée d'un tour complet, en millisecondes. */
+  period: number;
+  /** 1 sens horaire, -1 sens inverse. */
+  direction: 1 | -1;
+};
+
+/**
+ * Les boutons de couture qui tournent autour du titre : placés dans les marges
+ * de l'écran pour ne jamais passer sous le texte, chacun à sa taille, sa
+ * vitesse et son sens.
+ */
+const SPINNERS: Spinner[] = [
+  { top: '9%', left: '10%', size: 46, color: 'primary', holes: 'primaryDeep', period: 7000, direction: 1 },
+  { top: '14%', left: '72%', size: 32, color: 'secondary', holes: 'secondaryDeep', period: 5200, direction: -1 },
+  { top: '27%', left: '80%', size: 54, color: 'accent', holes: 'accentDeep', period: 9000, direction: 1 },
+  { top: '31%', left: '6%', size: 26, color: 'top', period: 5600, direction: -1 },
+  { top: '63%', left: '8%', size: 40, color: 'bottom', period: 6400, direction: -1 },
+  { top: '68%', left: '72%', size: 48, color: 'wood', holes: 'woodDeep', period: 8200, direction: 1 },
+  { top: '77%', left: '34%', size: 28, color: 'spring', period: 4600, direction: 1 },
 ];
 
 /**
- * Chronologie de l'ouverture : les cartes tombent une à une, la signature
- * apparaît au-dessus, puis le titre, et le bouton ferme la marche.
+ * Écran d'ouverture : le nom, la promesse de l'app et « Continuer ».
+ *
+ * La phrase d'accroche est à garder telle quelle. « Continuer » **remplace**
+ * l'écran par l'atelier : le retour arrière ne ramène pas ici.
  */
-const STEP = 500;
-const KICKER_DELAY = CATEGORIES.length * STEP;
-const TITLE_DELAY = KICKER_DELAY + STEP;
-const CTA_DELAY = TITLE_DELAY + STEP;
-
-export default function HomeScreen() {
-  const { colors, gradients, radius, spacing } = useTheme();
+export default function WelcomeScreen() {
+  const { colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  // « Réduire les animations » activé sur le téléphone : les boutons restent immobiles.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+  }, []);
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <LinearGradient
-        colors={gradients.hero}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}
-      >
-        <View style={[styles.heading, { gap: spacing.sm }]}>
-          <Reveal delay={TITLE_DELAY} travel={0}>
-            <Text style={[styles.title, { color: colors.onHero }]}>Lisa&apos;s Mess</Text>
-          </Reveal>
+    <View
+      style={[
+        styles.root,
+        {
+          backgroundColor: colors.background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom + spacing.lg,
+          paddingHorizontal: spacing.lg,
+        },
+      ]}
+    >
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {SPINNERS.map((spinner, index) => (
+          <SpinningButton key={index} spinner={spinner} still={reduceMotion} />
+        ))}
+      </View>
 
-          <Reveal delay={KICKER_DELAY}>
-            <Text style={[styles.kicker, { color: colors.onHero }]}>Ta garde-robe, rangée</Text>
-          </Reveal>
-        </View>
-
-        <View style={styles.cards}>
-          {CATEGORIES.map((category, index) => (
-            <Reveal
-              key={category.label}
-              delay={index * STEP}
-              style={{ marginLeft: index === 0 ? 0 : -spacing.md }}
-            >
-              <View
-                style={[
-                  styles.card,
-                  {
-                    backgroundColor: colors.surface,
-                    borderRadius: radius.lg,
-                    transform: [{ rotate: category.rotate }, { translateY: index * 6 }],
-                  },
-                ]}
-              >
-                <Text style={styles.cardEmoji}>{category.emoji}</Text>
-                <Text style={[styles.cardLabel, { color: colors[category.color] }]}>
-                  {category.label}
-                </Text>
-              </View>
-            </Reveal>
-          ))}
-        </View>
-      </LinearGradient>
-
-      <View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: colors.background,
-            borderTopLeftRadius: radius.xl,
-            borderTopRightRadius: radius.xl,
-            paddingHorizontal: spacing.lg,
-            paddingBottom: insets.bottom + spacing.lg,
-            gap: spacing.md,
-          },
-        ]}
-      >
-        <Reveal delay={TITLE_DELAY}>
-          <Text style={[styles.tagline, { color: colors.textMuted }]}>
+      <View style={[styles.center, { gap: spacing.md }]}>
+        <Reveal travel={0}>
+          <Text style={[styles.title, { color: colors.primary }]}>Lisa&apos;s Mess</Text>
+        </Reveal>
+        <Reveal delay={250}>
+          <Text style={[styles.tagline, { color: colors.text }]}>
             Photographie tes habits, compose tes tenues, repère ce que tu ne portes plus.
           </Text>
         </Reveal>
-
-        <Reveal delay={CTA_DELAY}>
-          <Button label="Ouvrir" onPress={() => router.push('/pieces')} style={styles.cta} />
-        </Reveal>
       </View>
+
+      <Reveal delay={500}>
+        <Button
+          label="Continuer"
+          icon={(ink) => <Ionicons name="arrow-forward" size={20} color={ink} />}
+          onPress={() => router.replace('/atelier')}
+        />
+      </Reveal>
     </View>
+  );
+}
+
+/** Un bouton de couture qui tourne sur lui-même, en boucle. */
+function SpinningButton({ spinner, still }: { spinner: Spinner; still: boolean }) {
+  const { colors } = useTheme();
+  const turn = useAnimatedValue(0);
+
+  useEffect(() => {
+    if (still) return;
+
+    const loop = Animated.loop(
+      Animated.timing(turn, {
+        toValue: 1,
+        duration: spinner.period,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spinner.period, still, turn]);
+
+  const rotate = turn.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', `${spinner.direction * 360}deg`],
+  });
+
+  return (
+    <Animated.View
+      style={[styles.spinner, { top: spinner.top, left: spinner.left, transform: [{ rotate }] }]}
+    >
+      <SewingButton
+        size={spinner.size}
+        color={colors[spinner.color]}
+        holeColor={spinner.holes ? colors[spinner.holes] : 'rgba(0, 0, 0, 0.28)'}
+      />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  hero: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 56,
-    gap: 28,
-  },
-  heading: {
-    alignItems: 'center',
-  },
-  kicker: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    opacity: 0.9,
-  },
-  cards: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  card: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    width: 96,
-    height: 116,
-    shadowColor: '#3A1220',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  cardEmoji: { fontSize: 34 },
-  cardLabel: { fontSize: 12, fontWeight: '700' },
-  sheet: {
-    marginTop: -32,
-    paddingTop: 32,
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: '800',
-    letterSpacing: -1.2,
-    textAlign: 'center',
-    // Le titre est posé sur le dégradé : une ombre douce le décolle des teintes claires.
-    textShadowColor: 'rgba(58, 18, 32, 0.28)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 12,
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  title: { fontFamily: fonts.display, fontSize: 48, letterSpacing: -0.5, textAlign: 'center' },
   tagline: {
-    fontSize: 16,
-    lineHeight: 23,
+    fontFamily: fonts.bodyBold,
+    fontSize: 17,
+    lineHeight: 24,
+    textAlign: 'center',
+    maxWidth: 300,
   },
-  cta: { marginTop: 8 },
+  spinner: { position: 'absolute' },
 });

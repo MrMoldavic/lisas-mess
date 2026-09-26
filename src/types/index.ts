@@ -115,11 +115,17 @@ export function familyForCategory(id: string | null): Family | null {
  *
  * `tilt` est le sens d'inclinaison du sticker : 1 penche à droite (sens horaire),
  * -1 à gauche. Les postes alternent, comme des autocollants collés à la main.
+ *
+ * `maxWidth` est la largeur maximale d'une pièce, en fraction de la toile : un
+ * haut peut prendre toute la largeur (épaules et manches), un bas s'arrête à
+ * celle des hanches. C'est ce qui garde les pièces cohérentes entre elles : sans
+ * ce plafond, chaque pièce grandit jusqu'à remplir son coupon, et un short
+ * presque carré sort plus large que le t-shirt.
  */
 export const OUTFIT_SLOTS = [
-  { key: 'top', label: 'Haut', family: 'top', anchor: 'end', share: 0.38, tilt: 1 },
-  { key: 'bottom', label: 'Bas', family: 'bottom', anchor: 'start', share: 0.47, tilt: -1 },
-  { key: 'shoes', label: 'Chaussures', family: 'shoes', anchor: 'start', share: 0.15, tilt: 1 },
+  { key: 'top', label: 'Haut', family: 'top', anchor: 'end', share: 0.37, tilt: 1, maxWidth: 1 },
+  { key: 'bottom', label: 'Bas', family: 'bottom', anchor: 'start', share: 0.44, tilt: -1, maxWidth: 0.5 },
+  { key: 'shoes', label: 'Chaussures', family: 'shoes', anchor: 'start', share: 0.19, tilt: 1, maxWidth: 0.6 },
 ] as const;
 
 /** Zone verticale d'un poste, en fraction de la hauteur de la toile. */

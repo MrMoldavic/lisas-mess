@@ -1,11 +1,11 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import type { ComponentProps } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
   Image,
-  Pressable,
   StyleSheet,
-  Text,
   useAnimatedValue,
   View,
 } from 'react-native';
@@ -16,7 +16,8 @@ import { clampLayout } from '@/services';
 import type { Piece, PieceLayout } from '@/services';
 import { OUTFIT_SLOTS } from '@/types';
 
-import { bandRect } from './SlotBands';
+import { Relief } from './Button';
+import { BAND_RADIUS, bandRect } from './SlotBands';
 import type { Rect } from './SlotBands';
 
 export type Canvas = { width: number; height: number };
@@ -34,6 +35,8 @@ type GarmentLayerProps = {
   showArrows?: boolean;
   /** `false` affiche sans attacher de geste (vignettes de la grille). */
   interactive?: boolean;
+  /** Vignette : liseré à 4 copies au lieu de 8, pour alléger une grille de tenues. */
+  lite?: boolean;
   /** Cadenas à côté des flèches : un poste verrouillé est épargné par le tirage au sort. */
   locked?: boolean;
   onToggleLock?: () => void;
@@ -123,7 +126,8 @@ function fitInBand(
   ratio: number,
   tiltDeg: number,
   outline: number,
-  anchor: 'start' | 'center' | 'end'
+  anchor: 'start' | 'center' | 'end',
+  maxWidth: number
 ): Geometry {
   const pad = outline * 3;
   const inner = {
@@ -133,7 +137,11 @@ function fitInBand(
     height: Math.max(1, band.height - 2 * pad),
   };
 
-  const photoWidth = inner.width / inner.height > ratio ? inner.height * ratio : inner.width;
+  // Largeur plafonnée par poste (`maxWidth` dans OUTFIT_SLOTS) : sans ça, un
+  // short presque carré remplirait tout son coupon et paraîtrait plus large
+  // qu'un t-shirt, limité, lui, par la hauteur de son coupon.
+  const widthLimit = Math.min(inner.width, band.width * maxWidth);
+  const photoWidth = widthLimit / inner.height > ratio ? inner.height * ratio : widthLimit;
   const photoHeight = photoWidth / ratio;
 
   const angle = (Math.abs(tiltDeg) * Math.PI) / 180;
@@ -227,6 +235,7 @@ export function GarmentLayer({
   onLayoutChange,
   showArrows = false,
   interactive = true,
+  lite = false,
   locked = false,
   onToggleLock,
 }: GarmentLayerProps) {
@@ -238,18 +247,21 @@ export function GarmentLayer({
 
   const rect = bandRect(slot, canvas);
   const anchor = OUTFIT_SLOTS[slot]?.anchor ?? 'center';
+  const maxWidth = OUTFIT_SLOTS[slot]?.maxWidth ?? 1;
+  const isLastSlot = slot === OUTFIT_SLOTS.length - 1;
   const tilt = piece ? tiltFor(piece.id, OUTFIT_SLOTS[slot]?.tilt ?? 1) : 0;
 
   // Liseré proportionnel à la toile : fin sur une vignette, plus marqué en grand.
   const outline = Math.max(1.5, Math.min(3, canvas.width * 0.008));
-  const outlineDirections = canvas.width > 250 ? OUTLINE_DIRECTIONS : OUTLINE_DIRECTIONS.slice(0, 4);
+  const outlineDirections =
+    lite || canvas.width <= 250 ? OUTLINE_DIRECTIONS.slice(0, 4) : OUTLINE_DIRECTIONS;
 
   const ratio = useAspectRatio(piece?.uri ?? null);
   const geometry = useMemo(
-    () => (ratio ? fitInBand(bandRect(slot, canvas), ratio, tilt, outline, anchor) : null),
+    () => (ratio ? fitInBand(bandRect(slot, canvas), ratio, tilt, outline, anchor, maxWidth) : null),
     // `canvas` est recréé à chaque rendu par les appelants : on suit ses dimensions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ratio, slot, canvas.width, canvas.height, tilt, outline, anchor]
+    [ratio, slot, canvas.width, canvas.height, tilt, outline, anchor, maxWidth]
   );
 
   const scale = useAnimatedValue(layout.scale);
@@ -421,7 +433,7 @@ export function GarmentLayer({
         pointerEvents="box-none"
         style={[
           styles.clip,
-          { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: radius.md },
+          { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: BAND_RADIUS },
         ]}
       >
         {body && interactive ? <GestureDetector gesture={gesture}>{body}</GestureDetector> : body}
@@ -429,96 +441,76 @@ export function GarmentLayer({
 
       {showArrows && canCycle && (
         // Hors du calque : elles restent en place quand on déplace le vêtement.
+        // Une flèche de chaque côté, rien d'autre : le vêtement, centré dans son
+        // coupon, le paraît aussi. Sur le coupon bas des chaussures, elles
+        // descendent en bas pour laisser le coin haut au cadenas.
         <Animated.View
           pointerEvents="box-none"
-          style={[styles.arrowRow, { top: rect.y, height: rect.height }]}
+          style={[
+            styles.arrowRow,
+            { top: rect.y, height: rect.height },
+            isLastSlot && styles.arrowRowBottom,
+          ]}
         >
-          <View style={styles.arrowGroup}>
-            <Arrow side="left" onPress={() => step(-1)} radius={radius.full} colors={colors} />
-            {onToggleLock && (
-              <LockButton
-                locked={locked}
-                onPress={onToggleLock}
-                radius={radius.full}
-                colors={colors}
-              />
-            )}
-          </View>
-          <Arrow side="right" onPress={() => step(1)} radius={radius.full} colors={colors} />
+          <RoundRelief
+            icon="chevron-back"
+            label="Vêtement précédent"
+            onPress={() => step(-1)}
+            ink={colors.primary}
+          />
+          <RoundRelief
+            icon="chevron-forward"
+            label="Vêtement suivant"
+            onPress={() => step(1)}
+            ink={colors.primary}
+          />
         </Animated.View>
+      )}
+
+      {showArrows && canCycle && onToggleLock && (
+        <View pointerEvents="box-none" style={[styles.lockSpot, { top: rect.y + 6 }]}>
+          <RoundRelief
+            icon={locked ? 'lock-closed' : 'lock-open'}
+            label={locked ? 'Libérer ce vêtement' : 'Garder ce vêtement au tirage'}
+            selected={locked}
+            onPress={onToggleLock}
+            ink={colors.textMuted}
+            small
+          />
+        </View>
       )}
     </>
   );
 }
 
-type LockButtonProps = {
-  locked: boolean;
+type RoundReliefProps = {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  label: string;
   onPress: () => void;
-  radius: number;
-  colors: { surface: string; primary: string; onPrimary: string; textMuted: string };
+  /** Couleur de l'icône sur la face papier. */
+  ink: string;
+  /** Face framboise pleine (cadenas fermé). */
+  selected?: boolean;
+  /** Version réduite, pour le cadenas du coin. */
+  small?: boolean;
 };
 
-/** Cadenas dessiné en vues (anse + corps) : l'app n'embarque pas de jeu d'icônes. */
-function LockButton({ locked, onPress, radius, colors }: LockButtonProps) {
-  const ink = locked ? colors.onPrimary : colors.textMuted;
+/** Petit bouton rond en relief posé sur un coupon : flèche ou cadenas. */
+function RoundRelief({ icon, label, onPress, ink, selected = false, small = false }: RoundReliefProps) {
+  const { radius } = useTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: locked }}
-      accessibilityLabel={locked ? 'Libérer ce vêtement' : 'Garder ce vêtement au tirage'}
+    <Relief
+      tone={selected ? 'primary' : 'surface'}
       onPress={onPress}
+      borderRadius={radius.full}
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
       hitSlop={8}
-      style={({ pressed }) => [
-        styles.lock,
-        {
-          backgroundColor: locked ? colors.primary : colors.surface,
-          borderRadius: radius,
-          opacity: pressed ? 0.6 : 0.92,
-        },
-      ]}
+      faceStyle={small ? styles.roundSmall : styles.round}
     >
-      <View
-        style={[
-          styles.shackle,
-          { borderColor: ink },
-          // Ouvert : l'anse se soulève et se décale vers la droite.
-          !locked && { transform: [{ translateY: -2 }, { translateX: 2 }] },
-        ]}
-      />
-      <View style={[styles.lockBody, { backgroundColor: ink }]} />
-    </Pressable>
-  );
-}
-
-type ArrowProps = {
-  side: 'left' | 'right';
-  onPress: () => void;
-  radius: number;
-  colors: { surface: string; primary: string };
-};
-
-function Arrow({ side, onPress, radius, colors }: ArrowProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={side === 'left' ? 'Vêtement précédent' : 'Vêtement suivant'}
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [
-        styles.arrow,
-        side === 'left' ? styles.arrowLeft : styles.arrowRight,
-        {
-          backgroundColor: colors.surface,
-          borderRadius: radius,
-          opacity: pressed ? 0.6 : 0.92,
-        },
-      ]}
-    >
-      <Text style={[styles.arrowGlyph, { color: colors.primary }]}>
-        {side === 'left' ? '‹' : '›'}
-      </Text>
-    </Pressable>
+      {(toneInk) => <Ionicons name={icon} size={small ? 14 : 18} color={selected ? toneInk : ink} />}
+    </Relief>
   );
 }
 
@@ -530,42 +522,17 @@ const styles = StyleSheet.create({
   copy: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   outline: { tintColor: '#FFFFFF' },
   shadow: { tintColor: '#000000', opacity: 0.28 },
-  arrowGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  lock: {
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shackle: {
-    width: 9,
-    height: 7,
-    borderWidth: 2,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 5,
-    borderTopRightRadius: 5,
-    marginBottom: -1,
-  },
-  lockBody: { width: 13, height: 9, borderRadius: 2 },
   arrowRow: {
     position: 'absolute',
     left: 0,
     right: 0,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  arrow: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowLeft: { marginLeft: 0 },
-  arrowRight: { marginRight: 0 },
-  arrowGlyph: {
-    fontSize: 26,
-    lineHeight: 28,
-    fontWeight: '600',
-  },
+  arrowRowBottom: { alignItems: 'flex-end', paddingBottom: 6 },
+  round: { width: 32, height: 32 },
+  roundSmall: { width: 26, height: 26 },
+  lockSpot: { position: 'absolute', left: 8 },
 });

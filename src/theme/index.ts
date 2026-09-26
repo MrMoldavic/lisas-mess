@@ -19,10 +19,25 @@ export const radius = {
   full: 999,
 } as const;
 
+/**
+ * Familles de police, chargées dans `app/_layout.tsx`. Fredoka, ronde et
+ * épaisse, pour les titres et les boutons ; Nunito pour les textes.
+ *
+ * Avec une police chargée, la graisse est **dans le nom de la famille** : ne pas
+ * y ajouter de `fontWeight`, iOS chercherait une variante qui n'existe pas et
+ * retomberait sur la police système.
+ */
+export const fonts = {
+  display: 'Fredoka_700Bold',
+  heading: 'Fredoka_600SemiBold',
+  body: 'Nunito_600SemiBold',
+  bodyBold: 'Nunito_800ExtraBold',
+} as const;
+
 export const typography = {
-  display: { fontSize: 42, fontWeight: '800', letterSpacing: -1.2 },
-  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.4 },
-  heading: { fontSize: 20, fontWeight: '600' },
-  body: { fontSize: 16, fontWeight: '400' },
-  caption: { fontSize: 13, fontWeight: '500' },
+  display: { fontSize: 42, fontFamily: fonts.display, letterSpacing: -0.6 },
+  title: { fontSize: 28, fontFamily: fonts.display, letterSpacing: -0.2 },
+  heading: { fontSize: 20, fontFamily: fonts.heading },
+  body: { fontSize: 16, fontFamily: fonts.body },
+  caption: { fontSize: 13, fontFamily: fonts.body },
 } as const;

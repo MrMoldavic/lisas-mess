@@ -1,18 +1,34 @@
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 
-import { Button, Confetti, GarmentLayer, Screen, SeasonPills, SlotBands } from '@/components';
-import type { SeasonFilter } from '@/components';
+import {
+  Button,
+  Confetti,
+  GarmentLayer,
+  Relief,
+  Screen,
+  ChallengeBanner,
+  SeasonPills,
+  SewingButton,
+  SlotBands,
+} from '@/components';
+import type { ChallengeState, SeasonFilter } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
 import {
   DuplicateOutfitError,
   addOutfit,
+  challengeCheck,
+  givenCount,
+  isInCrate,
+  listOutfits,
   listPieces,
   setOutfitSlotLayout,
   setPieceLayout,
+  workshopStatus,
 } from '@/services';
-import type { Piece, PieceLayout } from '@/services';
+import type { Outfit, Piece, PieceLayout } from '@/services';
 import { OUTFIT_SLOTS, familyForCategory } from '@/types';
 import type { OutfitSlot } from '@/types';
 
@@ -31,6 +47,8 @@ export default function OutfitComposerScreen() {
   const router = useRouter();
 
   const [pieces, setPieces] = useState<Piece[]>([]);
+  /** Tenues existantes : le défi du jour se juge par rapport à elles. */
+  const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [index, setIndex] = useState<Selection>({ top: 0, bottom: 0, shoes: 0 });
   /**
    * Position de chaque vêtement dans **cette** composition.
@@ -50,11 +68,14 @@ export default function OutfitComposerScreen() {
   const [season, setSeason] = useState<SeasonFilter>('all');
   /** La tenue est déjà écrite ; on laisse les confettis finir avant de revenir. */
   const [celebrating, setCelebrating] = useState(false);
+  /** La tenue enregistrée a relevé le défi du jour. */
+  const [wonChallenge, setWonChallenge] = useState(false);
   /** Toile partagée par les trois vêtements, mesurée au rendu. */
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     setPieces(listPieces());
+    setOutfits(listOutfits());
   }, []);
 
   /** Les pièces disponibles pour chaque poste, regroupées par famille. */
@@ -62,6 +83,8 @@ export default function OutfitComposerScreen() {
     const groups = { top: [], bottom: [], shoes: [] } as Record<OutfitSlot, Piece[]>;
 
     for (const piece of pieces) {
+      // Une pièce de la caisse « À donner » n'est plus proposée.
+      if (isInCrate(piece)) continue;
       const family = familyForCategory(piece.category);
       if (family === 'top' || family === 'bottom' || family === 'shoes') {
         groups[family].push(piece);
@@ -110,6 +133,20 @@ export default function OutfitComposerScreen() {
     (slot) => !locked[slot.key] && bySlot[slot.key].length > 1
   );
 
+  // `?surprise=1` (tiroir « Au hasard » de l'accueil) : un tirage dès que les
+  // pièces sont chargées, une seule fois. `?challenge=1` (carte du défi) :
+  // le défi du jour est rappelé en haut de l'écran.
+  const { surprise, challenge: fromChallenge } = useLocalSearchParams<{
+    surprise?: string;
+    challenge?: string;
+  }>();
+  const surprised = useRef(false);
+  useEffect(() => {
+    if (surprise !== '1' || surprised.current || !canShuffle) return;
+    surprised.current = true;
+    shuffle();
+  }, [canShuffle, shuffle, surprise]);
+
   const adjust = useCallback((slot: OutfitSlot, piece: Piece, layout: PieceLayout) => {
     setOffsets((current) => ({
       ...current,
@@ -125,6 +162,21 @@ export default function OutfitComposerScreen() {
   }, []);
 
   const canSave = OUTFIT_SLOTS.some((slot) => selectedFor(slot.key) !== null);
+
+  const status = useMemo(() => workshopStatus(pieces, outfits, givenCount()), [pieces, outfits]);
+  const check = useMemo(() => challengeCheck(pieces, outfits), [pieces, outfits]);
+
+  /** Où en est la tenue en cours face au défi du jour, jugée en direct. */
+  const challengeState: ChallengeState = status.challengeDone
+    ? 'done'
+    : check?.({
+          top: selectedFor('top')?.id ?? null,
+          bottom: selectedFor('bottom')?.id ?? null,
+          shoes: selectedFor('shoes')?.id ?? null,
+          season: season === 'all' ? null : season,
+        })
+      ? 'matched'
+      : 'pending';
 
   const save = useCallback(() => {
     try {
@@ -142,6 +194,7 @@ export default function OutfitComposerScreen() {
         }
       }
 
+      setWonChallenge(challengeState === 'matched');
       setCelebrating(true);
     } catch (error) {
       if (error instanceof DuplicateOutfitError) {
@@ -154,11 +207,22 @@ export default function OutfitComposerScreen() {
 
       Alert.alert('Enregistrement impossible', String(error));
     }
-  }, [layoutFor, season, selectedFor]);
+  }, [challengeState, layoutFor, season, selectedFor]);
 
   return (
     <Screen>
       <SeasonPills selected={season} onSelect={setSeason} />
+
+      {/* Rappel du défi, quand on arrive depuis sa carte : la toile rétrécit d'autant. */}
+      {fromChallenge === '1' && status.challenge && (
+        <View style={{ paddingTop: spacing.sm }}>
+          <ChallengeBanner
+            label={status.challenge.label}
+            reward={status.challenge.reward}
+            state={challengeState}
+          />
+        </View>
+      )}
 
       {/*
         Une seule toile pour les trois vêtements : aucune boîte par poste, aucune
@@ -196,7 +260,8 @@ export default function OutfitComposerScreen() {
       <View style={[styles.actions, { gap: spacing.sm, paddingTop: spacing.sm }]}>
         <DiceButton onPress={shuffle} disabled={!canShuffle || celebrating} />
         <Button
-          label={celebrating ? 'Enregistrée !' : 'Enregistrer la tenue'}
+          label={celebrating ? (wonChallenge ? 'Défi réussi !' : 'Créée !') : 'Créer la tenue'}
+          icon={(ink) => <Ionicons name="sparkles" size={20} color={ink} />}
           disabled={!canSave || celebrating}
           onPress={save}
           style={styles.save}
@@ -208,54 +273,21 @@ export default function OutfitComposerScreen() {
   );
 }
 
-/** Positions des points d'une face de dé à cinq, en fraction du carré. */
-const DICE_DOTS = [
-  [0.27, 0.27],
-  [0.73, 0.27],
-  [0.5, 0.5],
-  [0.27, 0.73],
-  [0.73, 0.73],
-];
-const DICE_SIZE = 24;
-const DOT_SIZE = 4;
-
-/** Bouton « tirer une tenue au hasard », dessiné en vues comme le cadenas. */
+/** « Tirer une tenue au hasard » : un bouton de couture, en relief canard. */
 function DiceButton({ onPress, disabled }: { onPress: () => void; disabled: boolean }) {
   const { colors, radius } = useTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Tirer une tenue au hasard"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
+    <Relief
+      tone="secondary"
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.dice,
-        {
-          borderColor: colors.primary,
-          borderRadius: radius.full,
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed ? 0.94 : 1 }, { rotate: pressed ? '-12deg' : '0deg' }],
-        },
-      ]}
+      disabled={disabled}
+      borderRadius={radius.full}
+      accessibilityLabel="Tirer une tenue au hasard"
+      faceStyle={styles.dice}
     >
-      <View style={[styles.diceFace, { borderColor: colors.primary }]}>
-        {DICE_DOTS.map(([x, y]) => (
-          <View
-            key={`${x},${y}`}
-            style={[
-              styles.diceDot,
-              {
-                backgroundColor: colors.primary,
-                left: x * DICE_SIZE - DOT_SIZE / 2 - 2,
-                top: y * DICE_SIZE - DOT_SIZE / 2 - 2,
-              },
-            ]}
-          />
-        ))}
-      </View>
-    </Pressable>
+      {(ink) => <SewingButton size={28} color={ink} holeColor={colors.secondaryDeep} />}
+    </Relief>
   );
 }
 
@@ -263,22 +295,5 @@ const styles = StyleSheet.create({
   canvas: { flex: 1 },
   actions: { flexDirection: 'row', alignItems: 'stretch' },
   save: { flex: 1 },
-  dice: {
-    width: 60,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  diceFace: {
-    width: DICE_SIZE,
-    height: DICE_SIZE,
-    borderWidth: 2,
-    borderRadius: 7,
-  },
-  diceDot: {
-    position: 'absolute',
-    width: DOT_SIZE,
-    height: DOT_SIZE,
-    borderRadius: DOT_SIZE / 2,
-  },
+  dice: { width: 58, height: 54 },
 });
