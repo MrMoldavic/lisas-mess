@@ -104,9 +104,10 @@ export function familyForCategory(id: string | null): Family | null {
 /**
  * Les trois postes qui composent une tenue, dans l'ordre d'affichage.
  *
- * `anchor` est le bord de sa zone contre lequel le vêtement est collé : celui qui
- * touche la taille (ou le bas, pour les chaussures). Il ne dépend donc plus des
- * proportions de la photo.
+ * `anchor` place le vêtement dans son encart : `center` le centre, `start` et
+ * `end` le collent en haut ou en bas. Tous sont centrés : chaque pièce a son
+ * propre coupon, bien séparé des autres, et un short collé en haut du sien
+ * (pour aligner les ceintures) paraissait simplement mal placé.
  *
  * `share` est la part de la hauteur de la toile réservée au poste, calquée sur
  * les proportions d'un corps : des parts égales donneraient aux chaussures autant
@@ -123,9 +124,9 @@ export function familyForCategory(id: string | null): Family | null {
  * presque carré sort plus large que le t-shirt.
  */
 export const OUTFIT_SLOTS = [
-  { key: 'top', label: 'Haut', family: 'top', anchor: 'end', share: 0.37, tilt: 1, maxWidth: 1 },
-  { key: 'bottom', label: 'Bas', family: 'bottom', anchor: 'start', share: 0.44, tilt: -1, maxWidth: 0.5 },
-  { key: 'shoes', label: 'Chaussures', family: 'shoes', anchor: 'start', share: 0.19, tilt: 1, maxWidth: 0.6 },
+  { key: 'top', label: 'Haut', family: 'top', anchor: 'center', share: 0.37, tilt: 1, maxWidth: 1 },
+  { key: 'bottom', label: 'Bas', family: 'bottom', anchor: 'center', share: 0.44, tilt: -1, maxWidth: 0.5 },
+  { key: 'shoes', label: 'Chaussures', family: 'shoes', anchor: 'center', share: 0.19, tilt: 1, maxWidth: 0.6 },
 ] as const;
 
 /** Zone verticale d'un poste, en fraction de la hauteur de la toile. */

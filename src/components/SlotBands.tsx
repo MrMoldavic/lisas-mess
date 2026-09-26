@@ -60,8 +60,6 @@ export function SlotBands({ canvas }: { canvas: Canvas }) {
         const rect = bandRect(rank, canvas);
         const fabric = colors[SOFT_COLORS[slot.key]];
         const pinked = rank < OUTFIT_SLOTS.length - 1;
-        // Le coupon des chaussures est trop bas pour porter une étiquette lisible.
-        const labelled = slot.key !== 'shoes';
 
         return (
           <View
@@ -86,12 +84,12 @@ export function SlotBands({ canvas }: { canvas: Canvas }) {
 
             <View style={styles.seam} />
 
-            {labelled && (
-              <View style={styles.label}>
-                <View style={[styles.labelHole, { backgroundColor: fabric }]} />
-                <Text style={styles.labelText}>{slot.label.toUpperCase()}</Text>
-              </View>
-            )}
+            {/* Étiquette en haut à droite : sur le coupon des chaussures, les flèches
+                sont descendues en bas pour lui laisser la place. */}
+            <View style={styles.label}>
+              <View style={[styles.labelHole, { backgroundColor: fabric }]} />
+              <Text style={styles.labelText}>{slot.label.toUpperCase()}</Text>
+            </View>
           </View>
         );
       })}

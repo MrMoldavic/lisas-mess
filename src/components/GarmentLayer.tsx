@@ -211,11 +211,9 @@ function containLayout(layout: PieceLayout, geometry: Geometry, canvas: Canvas):
  * pincement ne l'agrandit pas au-delà, le glisser est borné à ses limites, et
  * l'encart découpe ce qui dépasserait pendant l'animation des flèches.
  *
- * L'image est **collée au bord qui touche la taille** : les hauts en bas de leur
- * encart, les bas et les chaussures en haut. Un short s'arrête ainsi plus haut
- * qu'un pantalon au lieu d'être centré, et les proportions de l'image ne
- * décalent plus la ceinture. Le pincement réduit depuis ce même bord, pour que
- * la ceinture reste en place.
+ * L'image est placée dans son encart selon l'`anchor` du poste (voir
+ * OUTFIT_SLOTS) : aujourd'hui centrée. Le pincement réduit depuis ce même
+ * point, pour que la pièce reste en place.
  *
  * Chaque pièce est dessinée comme un **sticker** : un liseré blanc et une ombre
  * portée, faits de copies teintées de la même image, la rendent lisible sur
