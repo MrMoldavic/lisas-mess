@@ -39,10 +39,10 @@ import {
   removePiece,
   setPieceCategory,
   setVerdict,
-  givePiece,
-  isInCrate,
+  removeForGood,
+  isLeaving,
   usageCounts,
-  BUTTONS_PER_GIVEN,
+  BUTTONS_PER_LEFT,
   clearOutfitLayouts,
   toggleOutfitFavorite,
   updateOutfitPieces,
@@ -86,10 +86,9 @@ export default function PiecesScreen() {
   /** Tenue affichée en grand, `null` si la vue est fermée. */
   const [viewing, setViewing] = useState<Outfit | null>(null);
   // `?mode=outfits` (tiroir « Mes tenues » de l'accueil) ouvre directement sur les tenues.
-  // `?filter=crate` (fin du tri) : ouvre directement sur la caisse « À donner ».
-  const params = useLocalSearchParams<{ mode?: string; filter?: string }>();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<Mode>(params.mode === 'outfits' ? 'outfits' : 'pieces');
-  const [filter, setFilter] = useState<CategoryFilter>(params.filter === 'crate' ? 'crate' : 'all');
+  const [filter, setFilter] = useState<CategoryFilter>('all');
   const [seasonFilter, setSeasonFilter] = useState<SeasonFilter>('all');
   const [status, setStatus] = useState<Status>(null);
   /** Pièce dont on est en train de choisir la catégorie. */
@@ -206,22 +205,15 @@ export default function PiecesScreen() {
     [pieces]
   );
 
-  const crateCount = useMemo(() => pieces.filter(isInCrate).length, [pieces]);
   const usage = useMemo(() => usageCounts(outfits), [outfits]);
 
-  // La caisse a son propre filtre : ailleurs, ses pièces n'apparaissent pas.
+  // Les pièces « À sortir » ont leur propre écran : la garde-robe ne les montre pas.
   const visible = useMemo(() => {
-    if (filter === 'crate') return pieces.filter(isInCrate);
-    const kept = pieces.filter((piece) => !isInCrate(piece));
+    const kept = pieces.filter((piece) => !isLeaving(piece));
     if (filter === 'all') return kept;
     if (filter === 'unclassified') return kept.filter((piece) => piece.category === null);
     return kept.filter((piece) => piece.category === filter);
   }, [pieces, filter]);
-
-  // La caisse vidée, son filtre disparaît : on revient à « Tout ».
-  useEffect(() => {
-    if (filter === 'crate' && crateCount === 0) setFilter('all');
-  }, [crateCount, filter]);
 
   /** Relit la garde-robe et remet à jour la pièce affichée en grand. */
   const refresh = useCallback((focusId?: string) => {
@@ -233,7 +225,7 @@ export default function PiecesScreen() {
 
   /** La pilule sélectionnée classe la prochaine photo ; « Tout » la laisse à classer. */
   const categoryForNewPiece: CategoryId | null =
-    filter === 'all' || filter === 'unclassified' || filter === 'crate' ? null : filter;
+    filter === 'all' || filter === 'unclassified' ? null : filter;
 
   const importImage = useCallback(
     async (source: 'camera' | 'library') => {
@@ -302,7 +294,7 @@ export default function PiecesScreen() {
 
   const sortPiece = useCallback(
     (piece: Piece) => {
-      setVerdict(piece.id, 'donate');
+      setVerdict(piece.id, 'out');
       refresh(piece.id);
     },
     [refresh]
@@ -316,17 +308,18 @@ export default function PiecesScreen() {
     [refresh]
   );
 
-  const confirmGive = useCallback(
+  const confirmRemoveForGood = useCallback(
     (piece: Piece) => {
       Alert.alert(
-        "C'est donné ?",
-        `La pièce quitte ta garde-robe et ses tenues. +${BUTTONS_PER_GIVEN} boutons dans ton bocal.`,
+        'Supprimer définitivement ?',
+        `La photo est effacée et la pièce quitte ses tenues. +${BUTTONS_PER_LEFT} boutons dans ton bocal.`,
         [
-          { text: 'Pas encore', style: 'cancel' },
+          { text: 'Annuler', style: 'cancel' },
           {
-            text: "C'est donné !",
+            text: 'Supprimer',
+            style: 'destructive',
             onPress: () => {
-              givePiece(piece.id);
+              removeForGood(piece.id);
               setDetail(null);
               refresh();
             },
@@ -526,7 +519,6 @@ export default function PiecesScreen() {
           selected={filter}
           onSelect={setFilter}
           showUnclassified={hasUnclassified}
-          showCrate={crateCount > 0}
         />
       </View>
 
@@ -547,9 +539,7 @@ export default function PiecesScreen() {
             <Text style={[typography.body, { color: colors.textMuted }]}>
               {selectedCategory
                 ? `La prochaine photo sera classée dans « ${selectedCategory.label} ».`
-                : filter === 'crate'
-                  ? 'Les pièces que tu as triées. Appuie sur une pièce pour la donner ou la garder.'
-                  : 'Appuie sur une pièce pour la voir en grand, la classer ou la trier.'}
+                : 'Appuie sur une pièce pour la voir en grand, la classer ou la trier.'}
             </Text>
           </View>
         }
@@ -649,7 +639,7 @@ export default function PiecesScreen() {
         onClassify={classify}
         onSort={sortPiece}
         onKeep={keepPiece}
-        onGive={confirmGive}
+        onRemoveForGood={confirmRemoveForGood}
         onDelete={confirmRemove}
         onClose={() => setDetail(null)}
       />

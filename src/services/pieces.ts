@@ -10,7 +10,7 @@ import {
 } from './pieceLayouts';
 import type { PieceLayout } from './pieceLayouts';
 import { forgetPiece, renamePieceInOutfits } from './outfits';
-import { clearVerdict, countGiven, listVerdicts, moveVerdict } from './sorting';
+import { clearVerdict, countLeft, listVerdicts, moveVerdict } from './sorting';
 import type { Verdict } from './sorting';
 import { trimTransparentMargins } from './trim';
 
@@ -42,9 +42,9 @@ export type Piece = {
   verdict: Verdict | null;
 };
 
-/** La pièce est dans la caisse « À donner » : plus proposée pour créer des tenues. */
-export function isInCrate(piece: Piece): boolean {
-  return piece.verdict === 'donate';
+/** La pièce est « À sortir » : plus proposée pour créer des tenues. */
+export function isLeaving(piece: Piece): boolean {
+  return piece.verdict === 'out';
 }
 
 function ensureDirectory(): void {
@@ -243,13 +243,13 @@ export function removePiece(id: string): void {
 }
 
 /**
- * La pièce a été donnée : elle quitte la garde-robe (photo effacée, retirée des
- * tenues), et le compteur des pièces données avance — c'est lui qui rapporte
- * des boutons, pour qu'on ne puisse pas en gagner en sortant puis remettant une
- * pièce dans la caisse.
+ * La pièce est sortie pour de bon : elle quitte l'app (photo effacée, retirée des
+ * tenues), et le compteur des pièces sorties avance. C'est lui qui rapporte des
+ * boutons, pour qu'on ne puisse pas en gagner en mettant une pièce « À sortir »
+ * puis en la reprenant.
  */
-export function givePiece(id: string): void {
+export function removeForGood(id: string): void {
   removePiece(id);
   forgetPiece(id);
-  countGiven();
+  countLeft();
 }

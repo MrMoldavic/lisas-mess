@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/hooks/useTheme';
 import { fonts } from '@/theme';
-import { DEFAULT_LAYOUT, isInCrate } from '@/services';
+import { DEFAULT_LAYOUT, isLeaving } from '@/services';
 import type { Outfit, Piece } from '@/services';
 import { OUTFIT_SLOTS, colorNameForSeason, familyForCategory, findSeason } from '@/types';
 import type { OutfitSlot, SeasonId } from '@/types';
@@ -84,8 +84,8 @@ export function OutfitViewer({
     const groups = { top: [], bottom: [], shoes: [] } as Record<OutfitSlot, Piece[]>;
 
     for (const piece of pieces.values()) {
-      // Une pièce de la caisse « À donner » n'est plus proposée en modification.
-      if (isInCrate(piece)) continue;
+      // Une pièce « À sortir » n'est plus proposée en modification.
+      if (isLeaving(piece)) continue;
       const family = familyForCategory(piece.category);
       if (family === 'top' || family === 'bottom' || family === 'shoes') {
         groups[family].push(piece);

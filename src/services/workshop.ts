@@ -21,8 +21,8 @@ import type { Piece } from './pieces';
 export const BUTTONS_PER_OUTFIT = 10;
 /** Boutons gagnés en plus quand une tenue réussit le défi du jour. */
 export const BUTTONS_PER_CHALLENGE = 30;
-/** Boutons gagnés pour chaque pièce réellement donnée (voir givePiece). */
-export const BUTTONS_PER_GIVEN = 15;
+/** Boutons gagnés pour chaque pièce sortie pour de bon (voir removeForGood). */
+export const BUTTONS_PER_LEFT = 15;
 
 type Context = {
   pieceById: Map<string, Piece>;
@@ -137,8 +137,8 @@ function challengeFor(day: string, feasible: Challenge[]): Challenge | null {
 export function workshopStatus(
   pieces: Piece[],
   outfits: Outfit[],
-  /** Pièces déjà données (voir givenCount). */
-  given: number = 0,
+  /** Pièces déjà sorties de l'app (voir leftCount). */
+  left: number = 0,
   now: number = Date.now()
 ): WorkshopStatus {
   const pieceById = new Map(pieces.map((piece) => [piece.id, piece]));
@@ -179,7 +179,7 @@ export function workshopStatus(
     buttons:
       outfits.length * BUTTONS_PER_OUTFIT +
       succeeded.size * BUTTONS_PER_CHALLENGE +
-      given * BUTTONS_PER_GIVEN,
+      left * BUTTONS_PER_LEFT,
   };
 }
 

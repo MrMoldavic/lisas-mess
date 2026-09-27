@@ -10,25 +10,34 @@ import { File, Paths } from 'expo-file-system';
  *
  * - `keep` : je garde. La pièce ne revient pas au tri avant un moment.
  * - `unsure` : je ne sais pas. Elle reviendra au prochain tri.
- * - `donate` : je trie. Elle est dans la caisse « À donner » : plus proposée
- *   dans le composeur, jusqu'à ce qu'on la donne ou qu'on la ressorte.
+ * - `out` : je trie. Elle est « À sortir » : plus proposée dans le composeur,
+ *   jusqu'à ce qu'on la supprime définitivement (elle a quitté la garde-robe,
+ *   peu importe où : don, vente, recyclage) ou qu'on change d'avis.
  */
 const SORTING_FILE = new File(Paths.document, 'sorting.json');
 
-export type Verdict = 'keep' | 'unsure' | 'donate';
+export type Verdict = 'keep' | 'unsure' | 'out';
 
 type VerdictEntry = { verdict: Verdict; at: number };
 
 type SortingData = {
   verdicts: Record<string, VerdictEntry>;
-  /** Pièces réellement données : elles n'existent plus, seul le compte reste. */
+  /**
+   * Pièces sorties pour de bon : elles n'existent plus, seul le compte reste.
+   * Le champ s'appelle `given` pour relire les fichiers déjà enregistrés.
+   */
   given: number;
 };
 
 const EMPTY: SortingData = { verdicts: {}, given: 0 };
 
-function isVerdict(value: unknown): value is Verdict {
-  return value === 'keep' || value === 'unsure' || value === 'donate';
+/**
+ * Lit un verdict enregistré. `donate` est l'ancien nom de `out`, du temps de la
+ * « caisse à donner » : il est relu comme tel pour ne rien perdre.
+ */
+function readVerdict(value: unknown): Verdict | null {
+  if (value === 'donate') return 'out';
+  return value === 'keep' || value === 'unsure' || value === 'out' ? value : null;
 }
 
 function readAll(): SortingData {
@@ -39,9 +48,8 @@ function readAll(): SortingData {
     const verdicts: Record<string, VerdictEntry> = {};
 
     for (const [id, entry] of Object.entries(parsed.verdicts ?? {})) {
-      if (entry && isVerdict(entry.verdict)) {
-        verdicts[id] = { verdict: entry.verdict, at: Number(entry.at) || 0 };
-      }
+      const verdict = entry ? readVerdict(entry.verdict) : null;
+      if (verdict) verdicts[id] = { verdict, at: Number(entry.at) || 0 };
     }
 
     return { verdicts, given: Math.max(0, Number(parsed.given) || 0) };
@@ -77,7 +85,7 @@ export function setVerdict(pieceId: string, verdict: Verdict, now: number = Date
   writeAll({ ...data, verdicts: { ...data.verdicts, [pieceId]: { verdict, at: now } } });
 }
 
-/** Oublie le verdict d'une pièce (ressortie de la caisse, ou supprimée). */
+/** Oublie le verdict d'une pièce (remise dans les vêtements, ou supprimée). */
 export function clearVerdict(pieceId: string): void {
   const data = readAll();
   if (!data.verdicts[pieceId]) return;
@@ -95,12 +103,13 @@ export function moveVerdict(oldId: string, newId: string): void {
   writeAll(data);
 }
 
-export function givenCount(): number {
+/** Pièces déjà sorties de l'app (supprimées définitivement après un tri). */
+export function leftCount(): number {
   return readAll().given;
 }
 
-/** Compte une pièce donnée de plus. La suppression de la pièce se fait à part. */
-export function countGiven(): void {
+/** Compte une pièce sortie de plus. La suppression de la pièce se fait à part. */
+export function countLeft(): void {
   const data = readAll();
   writeAll({ ...data, given: data.given + 1 });
 }
@@ -130,7 +139,7 @@ export function usageCounts(outfits: OutfitRefs[]): Map<string, number> {
  * 3. jamais triées mais portées dans des tenues ;
  * 4. gardées il y a plus de 30 jours, pour refaire le point.
  *
- * Les pièces de la caisse et celles gardées récemment n'y sont pas.
+ * Les pièces à sortir et celles gardées récemment n'y sont pas.
  */
 export function sortQueue<T extends SortablePiece>(
   pieces: T[],
@@ -141,7 +150,7 @@ export function sortQueue<T extends SortablePiece>(
   const dates = listVerdictDates();
 
   const group = (piece: T): number | null => {
-    if (piece.verdict === 'donate') return null;
+    if (piece.verdict === 'out') return null;
     if (piece.verdict === 'keep') return now - (dates[piece.id] ?? 0) > KEEP_REST ? 3 : null;
     if (piece.verdict === 'unsure') return 1;
     return usage.has(piece.id) ? 2 : 0;
@@ -158,4 +167,23 @@ export function sortQueue<T extends SortablePiece>(
       return a.piece.id.localeCompare(b.piece.id);
     })
     .map((entry) => entry.piece);
+}
+
+/**
+ * Inventaire : efface les « je garde » et « je ne sais pas » des pièces indiquées,
+ * pour qu'elles repassent au tri, même celles gardées il y a moins de 30 jours.
+ * Sert à refaire le point sur une famille (tous les hauts, par exemple).
+ *
+ * La liste « À sortir » n'est pas touchée : ce sont des décisions de sortir, et
+ * les annuler en bloc les ferait perdre sans prévenir.
+ */
+export function resetVerdicts(pieceIds: string[]): void {
+  const ids = new Set(pieceIds);
+  const data = readAll();
+  const verdicts = Object.fromEntries(
+    Object.entries(data.verdicts).filter(
+      ([id, entry]) => !ids.has(id) || entry.verdict === 'out'
+    )
+  );
+  writeAll({ ...data, verdicts });
 }

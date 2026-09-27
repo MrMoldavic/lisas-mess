@@ -9,8 +9,8 @@ import { Bobine, Button, Relief, Reveal, SewingButton } from '@/components';
 import type { Tone } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
 import {
-  givenCount,
-  isInCrate,
+  leftCount,
+  isLeaving,
   listOutfits,
   listPieces,
   sortQueue,
@@ -18,6 +18,7 @@ import {
 } from '@/services';
 import type { DayState, Outfit, Piece, WorkshopStatus } from '@/services';
 import { fonts } from '@/theme';
+import { familyForCategory } from '@/types';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -60,9 +61,18 @@ export default function AtelierScreen() {
     }, [])
   );
 
-  const status = useMemo(() => workshopStatus(pieces, outfits, givenCount()), [pieces, outfits]);
-  const toSort = useMemo(() => sortQueue(pieces, outfits).length, [pieces, outfits]);
-  const inCrate = useMemo(() => pieces.filter(isInCrate).length, [pieces]);
+  const status = useMemo(() => workshopStatus(pieces, outfits, leftCount()), [pieces, outfits]);
+  // Seules les familles proposées au tri comptent : hauts, bas, chaussures.
+  const sortable = useMemo(
+    () =>
+      pieces.filter((piece) => {
+        const family = familyForCategory(piece.category);
+        return family === 'top' || family === 'bottom' || family === 'shoes';
+      }),
+    [pieces]
+  );
+  const toSort = useMemo(() => sortQueue(sortable, outfits).length, [sortable, outfits]);
+  const leaving = useMemo(() => pieces.filter(isLeaving).length, [pieces]);
 
   return (
     <ScrollView
@@ -156,14 +166,32 @@ export default function AtelierScreen() {
       </Reveal>
 
       {/* Le tri, une pièce à la fois : l'autre moitié de l'app. */}
-      {toSort > 0 && (
+      {/* Le tri est visible même quand tout est trié : c'est par là qu'on retrie.
+          Les pièces « À sortir » ont leur bouton dès qu'il y en a. */}
+      {(sortable.length > 0 || leaving > 0) && (
         <Reveal delay={STEP * 1.5}>
-          <Button
-            label={`Commencer le tri · ${toSort} pièce${toSort > 1 ? 's' : ''}`}
-            variant="wood"
-            icon={(ink) => <Ionicons name="swap-horizontal" size={20} color={ink} />}
-            onPress={() => router.push('/tri')}
-          />
+          <View style={{ gap: spacing.sm }}>
+            {sortable.length > 0 && (
+              <Button
+                label={
+                  toSort > 0
+                    ? `Commencer le tri · ${toSort} pièce${toSort > 1 ? 's' : ''}`
+                    : 'Le tri · tout est à jour'
+                }
+                variant="wood"
+                icon={(ink) => <Ionicons name="swap-horizontal" size={20} color={ink} />}
+                onPress={() => router.push('/tri')}
+              />
+            )}
+            {leaving > 0 && (
+              <Button
+                label={`À sortir · ${leaving} pièce${leaving > 1 ? 's' : ''}`}
+                variant="surface"
+                icon={(ink) => <Ionicons name="exit" size={20} color={ink} />}
+                onPress={() => router.push('/sortie')}
+              />
+            )}
+          </View>
         </Reveal>
       )}
 
@@ -201,9 +229,9 @@ export default function AtelierScreen() {
         ]}
       >
         <Text style={[styles.summaryText, { color: colors.textMuted }]}>
-          {pieces.length - inCrate} pièce{pieces.length - inCrate > 1 ? 's' : ''} · {outfits.length} tenue
+          {pieces.length - leaving} pièce{pieces.length - leaving > 1 ? 's' : ''} · {outfits.length} tenue
           {outfits.length > 1 ? 's' : ''}
-          {inCrate > 0 ? ` · ${inCrate} à donner` : ''}
+          {leaving > 0 ? ` · ${leaving} à sortir` : ''}
         </Text>
         <View style={styles.jar}>
           <SewingButton size={16} color={colors.accent} holeColor={colors.accentDeep} />

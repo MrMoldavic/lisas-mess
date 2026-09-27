@@ -5,13 +5,20 @@ export {
   addPieceFromUrl,
   setPieceCategory,
   removePiece,
-  givePiece,
-  isInCrate,
+  removeForGood,
+  isLeaving,
   needsTrimOfExistingPieces,
   trimExistingPieces,
 } from './pieces';
 export type { Piece } from './pieces';
-export { setVerdict, clearVerdict, givenCount, sortQueue, usageCounts } from './sorting';
+export {
+  setVerdict,
+  clearVerdict,
+  leftCount,
+  sortQueue,
+  usageCounts,
+  resetVerdicts,
+} from './sorting';
 export type { Verdict } from './sorting';
 export {
   setPieceLayout,
@@ -41,6 +48,6 @@ export {
   challengeCheck,
   BUTTONS_PER_OUTFIT,
   BUTTONS_PER_CHALLENGE,
-  BUTTONS_PER_GIVEN,
+  BUTTONS_PER_LEFT,
 } from './workshop';
 export type { ChallengeInfo, DayState, OutfitDraftCheck, WorkshopStatus } from './workshop';

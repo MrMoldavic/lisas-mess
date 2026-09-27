@@ -22,20 +22,20 @@ type PieceViewerProps = {
   /** Nombre de tenues qui utilisent la pièce. */
   usage: number;
   onClassify: (piece: Piece, category: CategoryId | null) => void;
-  /** Met la pièce dans la caisse « À donner ». */
+  /** Met la pièce « À sortir ». */
   onSort: (piece: Piece) => void;
-  /** La ressort de la caisse : finalement, on la garde. */
+  /** Finalement, on la garde : elle retourne dans les vêtements. */
   onKeep: (piece: Piece) => void;
-  /** Elle a été donnée (la confirmation est à la charge de l'appelant). */
-  onGive: (piece: Piece) => void;
+  /** Elle est partie : suppression définitive (la confirmation est à la charge de l'appelant). */
+  onRemoveForGood: (piece: Piece) => void;
   onDelete: (piece: Piece) => void;
   onClose: () => void;
 };
 
 /**
- * Une pièce en grand, avec ce qu'on peut en faire : la trier (caisse « À
- * donner »), la classer, la supprimer. Dans la caisse, les actions deviennent
- * « C'est donné ! » et « Je la garde ».
+ * Une pièce en grand, avec ce qu'on peut en faire : la trier (« À sortir »),
+ * la classer, la supprimer. Une pièce à sortir propose plutôt « Supprimer
+ * définitivement » et « Je la garde ».
  *
  * Le choix de catégorie s'ouvre **dans** la vue plutôt que dans un second
  * panneau : iOS gère mal deux fenêtres modales empilées.
@@ -46,7 +46,7 @@ export function PieceViewer({
   onClassify,
   onSort,
   onKeep,
-  onGive,
+  onRemoveForGood,
   onDelete,
   onClose,
 }: PieceViewerProps) {
@@ -62,7 +62,7 @@ export function PieceViewer({
   if (!piece) return null;
 
   const category = findCategory(piece.category);
-  const inCrate = piece.verdict === 'donate';
+  const leaving = piece.verdict === 'out';
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose}>
@@ -109,10 +109,10 @@ export function PieceViewer({
           <View style={styles.circle} />
         </View>
 
-        {inCrate && (
-          <View style={[styles.crateNote, { backgroundColor: colors.surfaceAlt, borderRadius: radius.full }]}>
-            <Ionicons name="cube" size={16} color={colors.wood} />
-            <Text style={[typography.caption, { color: colors.text }]}>Dans la caisse « À donner »</Text>
+        {leaving && (
+          <View style={[styles.leavingNote, { backgroundColor: colors.surfaceAlt, borderRadius: radius.full }]}>
+            <Ionicons name="exit" size={16} color={colors.wood} />
+            <Text style={[typography.caption, { color: colors.text }]}>À sortir de ta garde-robe</Text>
           </View>
         )}
 
@@ -165,23 +165,29 @@ export function PieceViewer({
             },
           ]}
         >
-          {inCrate ? (
+          {leaving ? (
             <>
-              <DockAction tone="primary" icon="gift" label="C'est donné !" onPress={() => onGive(piece)} />
               <DockAction tone="secondary" icon="arrow-undo" label="Je la garde" onPress={() => onKeep(piece)} />
+              <DockAction
+                tone="surface"
+                icon="trash"
+                label="Supprimer"
+                danger
+                onPress={() => onRemoveForGood(piece)}
+              />
             </>
           ) : (
             <>
-              <DockAction tone="primary" icon="cube" label="Trier" onPress={() => onSort(piece)} />
+              <DockAction tone="primary" icon="exit" label="Trier" onPress={() => onSort(piece)} />
               <DockAction
                 tone={classifying ? 'accent' : 'secondary'}
                 icon="pricetag"
                 label={classifying ? 'Fermer' : 'Classer'}
                 onPress={() => setClassifying((open) => !open)}
               />
+              <DockAction tone="surface" icon="trash" label="Supprimer" danger onPress={() => onDelete(piece)} />
             </>
           )}
-          <DockAction tone="surface" icon="trash" label="Supprimer" danger onPress={() => onDelete(piece)} />
         </View>
       </View>
     </Modal>
@@ -224,7 +230,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 5 },
   chipText: { fontFamily: fonts.heading, fontSize: 14 },
   usage: { fontFamily: fonts.bodyBold, fontSize: 12 },
-  crateNote: {
+  leavingNote: {
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',

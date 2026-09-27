@@ -11,7 +11,6 @@ import {
   Screen,
   ChallengeBanner,
   SeasonPills,
-  SewingButton,
   SlotBands,
 } from '@/components';
 import type { ChallengeState, SeasonFilter } from '@/components';
@@ -20,8 +19,8 @@ import {
   DuplicateOutfitError,
   addOutfit,
   challengeCheck,
-  givenCount,
-  isInCrate,
+  leftCount,
+  isLeaving,
   listOutfits,
   listPieces,
   setOutfitSlotLayout,
@@ -83,8 +82,8 @@ export default function OutfitComposerScreen() {
     const groups = { top: [], bottom: [], shoes: [] } as Record<OutfitSlot, Piece[]>;
 
     for (const piece of pieces) {
-      // Une pièce de la caisse « À donner » n'est plus proposée.
-      if (isInCrate(piece)) continue;
+      // Une pièce « À sortir » n'est plus proposée.
+      if (isLeaving(piece)) continue;
       const family = familyForCategory(piece.category);
       if (family === 'top' || family === 'bottom' || family === 'shoes') {
         groups[family].push(piece);
@@ -163,7 +162,7 @@ export default function OutfitComposerScreen() {
 
   const canSave = OUTFIT_SLOTS.some((slot) => selectedFor(slot.key) !== null);
 
-  const status = useMemo(() => workshopStatus(pieces, outfits, givenCount()), [pieces, outfits]);
+  const status = useMemo(() => workshopStatus(pieces, outfits, leftCount()), [pieces, outfits]);
   const check = useMemo(() => challengeCheck(pieces, outfits), [pieces, outfits]);
 
   /** Où en est la tenue en cours face au défi du jour, jugée en direct. */
@@ -273,7 +272,22 @@ export default function OutfitComposerScreen() {
   );
 }
 
-/** « Tirer une tenue au hasard » : un bouton de couture, en relief canard. */
+/** Points d'une face de dé à cinq, en fraction du côté. */
+const DIE_DOTS = [
+  [0.26, 0.26],
+  [0.74, 0.26],
+  [0.5, 0.5],
+  [0.26, 0.74],
+  [0.74, 0.74],
+];
+const DIE = 30;
+const DOT = 6;
+
+/**
+ * « Tirer une tenue au hasard » : une face de dé, légèrement penchée, sur un
+ * bouton carré en relief canard. Un dé se comprend tout de suite, là où le
+ * bouton de couture ne disait pas à quoi il servait.
+ */
 function DiceButton({ onPress, disabled }: { onPress: () => void; disabled: boolean }) {
   const { colors, radius } = useTheme();
 
@@ -282,11 +296,23 @@ function DiceButton({ onPress, disabled }: { onPress: () => void; disabled: bool
       tone="secondary"
       onPress={onPress}
       disabled={disabled}
-      borderRadius={radius.full}
+      borderRadius={radius.md}
       accessibilityLabel="Tirer une tenue au hasard"
       faceStyle={styles.dice}
     >
-      {(ink) => <SewingButton size={28} color={ink} holeColor={colors.secondaryDeep} />}
+      {(ink) => (
+        <View style={[styles.die, { backgroundColor: ink }]}>
+          {DIE_DOTS.map(([x, y]) => (
+            <View
+              key={`${x},${y}`}
+              style={[
+                styles.dot,
+                { backgroundColor: colors.secondaryDeep, left: x * DIE - DOT / 2, top: y * DIE - DOT / 2 },
+              ]}
+            />
+          ))}
+        </View>
+      )}
     </Relief>
   );
 }
@@ -296,4 +322,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'stretch' },
   save: { flex: 1 },
   dice: { width: 58, height: 54 },
+  die: { width: DIE, height: DIE, borderRadius: 8, transform: [{ rotate: '-10deg' }] },
+  dot: { position: 'absolute', width: DOT, height: DOT, borderRadius: DOT / 2 },
 });
