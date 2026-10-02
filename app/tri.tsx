@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   useAnimatedValue,
   useWindowDimensions,
 } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Svg, { Path, Rect } from 'react-native-svg';
 
@@ -92,14 +94,14 @@ function FamilyGlyph({ family, color }: { family: OutfitSlot; color: string }) {
 
 /** Les trois décisions, avec leur geste, leur libellé et leur couleur. */
 const DECISIONS: Record<Verdict, { label: string; icon: IconName; tone: Tone; hint: string }> = {
-  unsure: { label: 'Je ne sais pas', icon: 'help', tone: 'accent', hint: 'glisse à gauche' },
-  out: { label: 'Je trie', icon: 'cube', tone: 'primary', hint: 'glisse vers le haut' },
+  out: { label: 'Je trie', icon: 'cube', tone: 'primary', hint: 'glisse à gauche' },
+  unsure: { label: 'Je ne sais pas', icon: 'help', tone: 'accent', hint: 'glisse vers le haut' },
   keep: { label: 'Je garde', icon: 'heart', tone: 'secondary', hint: 'glisse à droite' },
 };
 
 /**
- * Le tri, une pièce à la fois : glisser à droite « je garde », à gauche « je ne
- * sais pas », vers le haut « je trie » (la pièce passe « À sortir »). Les boutons du bas
+ * Le tri, une pièce à la fois : glisser à droite « je garde », à gauche « je
+ * trie » (la pièce passe « À sortir »), vers le haut « je ne sais pas ». Les boutons du bas
  * font la même chose, pour qui préfère toucher.
  *
  * On commence par choisir ce qu'on trie : les hauts, les bas ou les chaussures.
@@ -210,7 +212,7 @@ export default function SortScreen() {
       const target =
         verdict === 'keep'
           ? { x: width * 1.3, y: 0 }
-          : verdict === 'unsure'
+          : verdict === 'out'
             ? { x: -width * 1.3, y: 0 }
             : { x: 0, y: -900 };
 
@@ -244,9 +246,9 @@ export default function SortScreen() {
           if (busy.current) return;
           const { translationX: dx, translationY: dy } = event;
 
-          if (-dy > THRESHOLD && -dy > Math.abs(dx)) decideRef.current('out');
+          if (-dy > THRESHOLD && -dy > Math.abs(dx)) decideRef.current('unsure');
           else if (dx > THRESHOLD) decideRef.current('keep');
-          else if (dx < -THRESHOLD) decideRef.current('unsure');
+          else if (dx < -THRESHOLD) decideRef.current('out');
           else {
             Animated.parallel([
               Animated.spring(x, { toValue: 0, useNativeDriver: true }),
@@ -259,8 +261,8 @@ export default function SortScreen() {
 
   const rotate = x.interpolate({ inputRange: [-width, 0, width], outputRange: ['-14deg', '0deg', '14deg'] });
   const keepOpacity = x.interpolate({ inputRange: [0, THRESHOLD], outputRange: [0, 1], extrapolate: 'clamp' });
-  const unsureOpacity = x.interpolate({ inputRange: [-THRESHOLD, 0], outputRange: [1, 0], extrapolate: 'clamp' });
-  const outOpacity = y.interpolate({ inputRange: [-THRESHOLD, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+  const outOpacity = x.interpolate({ inputRange: [-THRESHOLD, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+  const unsureOpacity = y.interpolate({ inputRange: [-THRESHOLD, 0], outputRange: [1, 0], extrapolate: 'clamp' });
 
   if (family === null) {
     return (
@@ -404,23 +406,45 @@ export default function SortScreen() {
 
             <PieceSticker uri={piece.uri} style={styles.sticker} />
 
+            {/* The half opposite the swipe, where its stamp shows, fills with the decision's color (above the opaque photo). */}
+            <SwipeTint side="right" color={colors.primary} opacity={outOpacity} />
+            <SwipeTint side="left" color={colors.secondary} opacity={keepOpacity} />
+            <SwipeTint side="bottom" color={colors.accent} opacity={unsureOpacity} />
+
             {/* Tampons qui apparaissent pendant le geste. */}
-            <Animated.View style={[styles.stamp, styles.stampKeep, { borderColor: colors.secondary, opacity: keepOpacity }]}>
-              <Text style={[styles.stampText, { color: colors.secondary }]}>Je garde</Text>
-            </Animated.View>
-            <Animated.View style={[styles.stamp, styles.stampUnsure, { borderColor: colors.accentDeep, opacity: unsureOpacity }]}>
-              <Text style={[styles.stampText, { color: colors.accentDeep }]}>Je ne sais pas</Text>
-            </Animated.View>
-            <Animated.View style={[styles.stamp, styles.stampOut, { borderColor: colors.primary, opacity: outOpacity }]}>
-              <Text style={[styles.stampText, { color: colors.primary }]}>Je trie</Text>
-            </Animated.View>
+            <Stamp
+              label="Je garde"
+              fill={colors.secondary}
+              border={colors.secondaryDeep}
+              ink={colors.onSecondary}
+              opacity={keepOpacity}
+              style={styles.stampKeep}
+            />
+            <Stamp
+              label="Je ne sais pas"
+              fill={colors.accent}
+              border={colors.accentDeep}
+              ink={colors.onAccent}
+              opacity={unsureOpacity}
+              style={styles.stampUnsure}
+            />
+            <Stamp
+              label="Je trie"
+              fill={colors.primary}
+              border={colors.primaryDeep}
+              ink={colors.onPrimary}
+              opacity={outOpacity}
+              style={styles.stampOut}
+            />
           </Animated.View>
         </GestureDetector>
       </View>
 
       <View style={[styles.actions, { paddingTop: spacing.md }]}>
-        {(['unsure', 'out', 'keep'] as Verdict[]).map((verdict) => {
+        {(['out', 'unsure', 'keep'] as Verdict[]).map((verdict) => {
           const decision = DECISIONS[verdict];
+          // The middle button, the one for swiping up, is the big one.
+          const center = verdict === 'unsure';
           return (
             <View key={verdict} style={styles.action}>
               <Relief
@@ -428,9 +452,9 @@ export default function SortScreen() {
                 onPress={() => decide(verdict)}
                 borderRadius={radius.full}
                 accessibilityLabel={decision.label}
-                faceStyle={verdict === 'out' ? styles.actionBig : styles.actionFace}
+                faceStyle={center ? styles.actionBig : styles.actionFace}
               >
-                {(ink) => <Ionicons name={decision.icon} size={verdict === 'out' ? 30 : 24} color={ink} />}
+                {(ink) => <Ionicons name={decision.icon} size={center ? 30 : 24} color={ink} />}
               </Relief>
               <Text style={[styles.actionLabel, { color: colors.text }]}>{decision.label}</Text>
               <Text style={[styles.actionHint, { color: colors.textMuted }]}>{decision.hint}</Text>
@@ -442,7 +466,63 @@ export default function SortScreen() {
   );
 }
 
+type SwipeTintProps = {
+  side: 'left' | 'right' | 'bottom';
+  /** Hex color of the decision, as `#RRGGBB`. */
+  color: string;
+  opacity: Animated.AnimatedInterpolation<number>;
+};
+
+const TINT_EDGES = {
+  left: { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } },
+  right: { start: { x: 1, y: 0 }, end: { x: 0, y: 0 } },
+  bottom: { start: { x: 0, y: 1 }, end: { x: 0, y: 0 } },
+};
+
+/** Half of the card tinted with the decision's color, strongest at the card's edge and fading toward the middle. */
+function SwipeTint({ side, color, opacity }: SwipeTintProps) {
+  return (
+    <Animated.View pointerEvents="none" style={[styles.tint, styles[`tint_${side}`], { opacity }]}>
+      <LinearGradient
+        colors={[`${color}CC`, `${color}00`]}
+        start={TINT_EDGES[side].start}
+        end={TINT_EDGES[side].end}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
+type StampProps = {
+  label: string;
+  /** Hex color of the decision, as `#RRGGBB`. */
+  fill: string;
+  border: string;
+  ink: string;
+  opacity: Animated.AnimatedInterpolation<number>;
+  style: StyleProp<ViewStyle>;
+};
+
+/** Decision stamp shown during the swipe, filled with its color in a fade. */
+function Stamp({ label, fill, border, ink, opacity, style }: StampProps) {
+  return (
+    <Animated.View pointerEvents="none" style={[styles.stamp, style, { borderColor: border, opacity }]}>
+      <LinearGradient
+        colors={[fill, `${fill}99`]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <Text style={[styles.stampText, { color: ink }]}>{label}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
+  tint: { position: 'absolute' },
+  tint_left: { top: 0, bottom: 0, left: 0, width: '50%' },
+  tint_right: { top: 0, bottom: 0, right: 0, width: '50%' },
+  tint_bottom: { left: 0, right: 0, bottom: 0, height: '50%' },
   progress: { fontFamily: fonts.heading, fontSize: 14, textAlign: 'center' },
   stage: { flex: 1, justifyContent: 'center', paddingVertical: 12 },
   card: { flex: 1, borderBottomWidth: 5, padding: 18, overflow: 'hidden' },
@@ -467,11 +547,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 3,
+    overflow: 'hidden',
     backgroundColor: 'rgba(255, 249, 240, 0.9)',
   },
   stampKeep: { top: 60, left: 22, transform: [{ rotate: '-12deg' }] },
-  stampUnsure: { top: 60, right: 22, transform: [{ rotate: '12deg' }] },
-  stampOut: { bottom: 40, alignSelf: 'center', transform: [{ rotate: '-4deg' }] },
+  stampOut: { top: 60, right: 22, transform: [{ rotate: '12deg' }] },
+  stampUnsure: { bottom: 40, alignSelf: 'center', transform: [{ rotate: '-4deg' }] },
   stampText: { fontFamily: fonts.display, fontSize: 20, textTransform: 'uppercase', letterSpacing: 1 },
   actions: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
   action: { alignItems: 'center', gap: 3, width: '32%' },

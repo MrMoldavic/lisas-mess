@@ -135,10 +135,24 @@ export default function OutfitComposerScreen() {
   // `?surprise=1` (tiroir « Au hasard » de l'accueil) : un tirage dès que les
   // pièces sont chargées, une seule fois. `?challenge=1` (carte du défi) :
   // le défi du jour est rappelé en haut de l'écran.
-  const { surprise, challenge: fromChallenge } = useLocalSearchParams<{
+  const { surprise, challenge: fromChallenge, piece: startPiece } = useLocalSearchParams<{
     surprise?: string;
     challenge?: string;
+    /** Piece to start from (« + » of the piece view): put in its slot and locked against the dice. */
+    piece?: string;
   }>();
+  const started = useRef(false);
+  useEffect(() => {
+    if (!startPiece || started.current) return;
+    for (const slot of OUTFIT_SLOTS) {
+      const position = bySlot[slot.key].findIndex((piece) => piece.id === startPiece);
+      if (position < 0) continue;
+      started.current = true;
+      cycle(slot.key, position);
+      setLocked((current) => ({ ...current, [slot.key]: true }));
+      return;
+    }
+  }, [bySlot, cycle, startPiece]);
   const surprised = useRef(false);
   useEffect(() => {
     if (surprise !== '1' || surprised.current || !canShuffle) return;

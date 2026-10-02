@@ -17,7 +17,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import type { Piece } from '@/services';
 import { fonts } from '@/theme';
-import { CATEGORIES, colorNameForCategory, findCategory, softColorNameForCategory } from '@/types';
+import {
+  CATEGORIES,
+  colorNameForCategory,
+  familyForCategory,
+  findCategory,
+  softColorNameForCategory,
+} from '@/types';
 import type { CategoryId } from '@/types';
 
 import { Bobine } from './Bobine';
@@ -34,9 +40,10 @@ const TAG_RISE = 16;
 const NOTICE_HOLD = 1600;
 
 /** What Bobine says about the piece: `strong` is highlighted, `rest` completes the sentence. */
-function bobineSpeech(usage: number, leaving: boolean): { strong: string; rest: string } {
+function bobineSpeech(usage: number, leaving: boolean, asking: boolean): { strong: string; rest: string } {
+  if (asking) return { strong: 'Nouvelle pièce', rest: ' ! Dans quelle catégorie je la range ?' };
   if (leaving) return { strong: 'À sortir de ta garde-robe', rest: ' : tu la gardes finalement, ou elle part ?' };
-  if (usage === 0) return { strong: 'Jamais dans une tenue', rest: " pour l'instant : on lui en crée une ?" };
+  if (usage === 0) return { strong: 'Jamais dans une tenue', rest: ' : on essaie ?' };
   const outfits = usage === 1 ? 'une tenue' : `${usage} tenues`;
   return { strong: `Déjà dans ${outfits}`, rest: usage >= 3 ? ', une valeur sûre !' : ' !' };
 }
@@ -46,6 +53,10 @@ type PieceViewerProps = {
   piece: Piece | null;
   /** Nombre de tenues qui utilisent la pièce. */
   usage: number;
+  /** Opens straight on the category choice, for a piece just added. */
+  classifyOnOpen?: boolean;
+  /** Starts an outfit around the piece; without it, no « + » is offered. */
+  onCreateOutfit?: (piece: Piece) => void;
   /** Returns `false` when the classification failed, so no confirmation is shown. */
   onClassify: (piece: Piece, category: CategoryId | null) => boolean;
   /** Met la pièce « À sortir ». */
@@ -69,6 +80,8 @@ type PieceViewerProps = {
 export function PieceViewer({
   piece,
   usage,
+  classifyOnOpen = false,
+  onCreateOutfit,
   onClassify,
   onSort,
   onKeep,
@@ -86,8 +99,8 @@ export function PieceViewer({
 
   const pieceId = piece?.id ?? null;
   useEffect(() => {
-    setClassifying(false);
-  }, [pieceId]);
+    setClassifying(classifyOnOpen);
+  }, [pieceId, classifyOnOpen]);
 
   const open = piece !== null;
   useEffect(() => {
@@ -113,8 +126,17 @@ export function PieceViewer({
 
   const category = findCategory(piece.category);
   const leaving = piece.verdict === 'out';
-  const speech = bobineSpeech(usage, leaving);
-  const strongColor = leaving ? colors.woodDeep : usage === 0 ? colors.primary : colors.secondaryDeep;
+  const asking = classifying && piece.category === null;
+  // Only a piece the composer can place (top, bottom or shoes) can start an outfit.
+  const family = familyForCategory(piece.category);
+  const canCreate =
+    onCreateOutfit !== undefined &&
+    usage === 0 &&
+    !leaving &&
+    !asking &&
+    (family === 'top' || family === 'bottom' || family === 'shoes');
+  const speech = bobineSpeech(usage, leaving, asking);
+  const strongColor = asking || (!leaving && usage === 0) ? colors.primary : leaving ? colors.woodDeep : colors.secondaryDeep;
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose}>
@@ -206,18 +228,29 @@ export function PieceViewer({
             ]}
           >
             <View style={[styles.tail, { backgroundColor: colors.surface }]} />
-            <Animated.Text
+            <Animated.View
               style={[
-                styles.speech,
-                {
-                  color: colors.text,
-                  opacity: notice ? noticeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) : 1,
-                },
+                styles.speechRow,
+                { opacity: notice ? noticeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) : 1 },
               ]}
             >
-              <Text style={{ color: strongColor }}>{speech.strong}</Text>
-              {speech.rest}
-            </Animated.Text>
+              <Text style={[styles.speech, { color: colors.text }]}>
+                <Text style={{ color: strongColor }}>{speech.strong}</Text>
+                {speech.rest}
+              </Text>
+              {canCreate && (
+                <Relief
+                  tone="primary"
+                  onPress={() => onCreateOutfit(piece)}
+                  borderRadius={radius.full}
+                  accessibilityLabel="Créer une tenue avec cette pièce"
+                  hitSlop={8}
+                  faceStyle={styles.plus}
+                >
+                  {(ink) => <Ionicons name="add" size={22} color={ink} />}
+                </Relief>
+              )}
+            </Animated.View>
             {notice && (
               <Animated.View
                 key={notice.key}
@@ -316,7 +349,9 @@ const styles = StyleSheet.create({
   speaker: { flexDirection: 'row', alignItems: 'center' },
   bubble: { flex: 1, justifyContent: 'center', minHeight: 60, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 4 },
   tail: { position: 'absolute', left: -6, top: '50%', marginTop: -7, width: 14, height: 14, transform: [{ rotate: '45deg' }] },
-  speech: { fontFamily: fonts.bodyBold, fontSize: 16, lineHeight: 21 },
+  speechRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  speech: { flex: 1, fontFamily: fonts.bodyBold, fontSize: 16, lineHeight: 21 },
+  plus: { width: 34, height: 34 },
   notice: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

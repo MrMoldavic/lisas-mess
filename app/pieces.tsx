@@ -75,6 +75,9 @@ const LIBRARY_OPTIONS: ImagePicker.ImagePickerOptions = {
 
 type Status = null | 'saving' | 'cutout' | 'trimming';
 
+/** iOS cannot present a modal while the picker is still sliding away. */
+const PICKER_DISMISS_MS = 600;
+
 /**
  * Quatre cartes visibles d'un coup — la carte « + » plus trois tenues — donc
  * deux colonnes sur deux rangées. Chaque carte occupe ainsi le quart de la place
@@ -100,6 +103,8 @@ export default function PiecesScreen() {
   const [status, setStatus] = useState<Status>(null);
   /** Pièce dont on est en train de choisir la catégorie. */
   const [detail, setDetail] = useState<Piece | null>(null);
+  /** The piece shown is one just added and still unclassified: its view opens on the category choice. */
+  const [classifyOnOpen, setClassifyOnOpen] = useState(false);
 
   const router = useRouter();
 
@@ -260,31 +265,57 @@ export default function PiecesScreen() {
             : await ImagePicker.launchImageLibraryAsync(LIBRARY_OPTIONS);
 
         if (result.canceled) return;
+        const pickedAt = Date.now();
         const sourceUri = result.assets[0].uri;
 
+        let added: Piece;
+        let alerted = false;
         if (isCutoutConfigured()) {
           setStatus('cutout');
           try {
             const cutoutUrl = await removeBackground(sourceUri);
-            await addPieceFromUrl(cutoutUrl, categoryForNewPiece);
+            added = await addPieceFromUrl(cutoutUrl, categoryForNewPiece);
           } catch (error) {
             // Le détourage est un confort, pas une condition : on garde la photo brute.
             setStatus('saving');
-            await addPiece(sourceUri, categoryForNewPiece);
+            added = await addPiece(sourceUri, categoryForNewPiece);
             Alert.alert('Détourage impossible', `${error}\n\nLa photo a été gardée telle quelle.`);
+            alerted = true;
           }
         } else {
-          await addPiece(sourceUri, categoryForNewPiece);
+          added = await addPiece(sourceUri, categoryForNewPiece);
         }
 
         setPieces(listPieces());
+
+        // Not classified by the selected pill: open it right away on the category choice (not over an alert).
+        if (added.category === null && !alerted) {
+          const wait = PICKER_DISMISS_MS - (Date.now() - pickedAt);
+          if (Platform.OS === 'ios' && wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+          setClassifyOnOpen(true);
+          refresh(added.id);
+        }
       } catch (error) {
         Alert.alert('Enregistrement impossible', String(error));
       } finally {
         setStatus(null);
       }
     },
-    [categoryForNewPiece]
+    [categoryForNewPiece, refresh]
+  );
+
+  const closeDetail = useCallback(() => {
+    setDetail(null);
+    setClassifyOnOpen(false);
+  }, []);
+
+  /** Leaves the piece view for the composer, with this piece already in place. */
+  const createOutfitWith = useCallback(
+    (piece: Piece) => {
+      closeDetail();
+      router.push({ pathname: '/tenue', params: { piece: piece.id } });
+    },
+    [closeDetail, router]
   );
 
   const classify = useCallback(
@@ -292,6 +323,7 @@ export default function PiecesScreen() {
       try {
         // Reclasser renomme le fichier : la pièce affichée change d'identifiant.
         const renamed = setPieceCategory(piece.id, category);
+        setClassifyOnOpen(false);
         refresh(renamed.id);
         return true;
       } catch (error) {
@@ -330,14 +362,14 @@ export default function PiecesScreen() {
             style: 'destructive',
             onPress: () => {
               removeForGood(piece.id);
-              setDetail(null);
+              closeDetail();
               refresh();
             },
           },
         ]
       );
     },
-    [refresh]
+    [closeDetail, refresh]
   );
 
   const confirmRemove = useCallback((piece: Piece) => {
@@ -350,13 +382,13 @@ export default function PiecesScreen() {
           removePiece(piece.id);
           // Sans ça, les tenues garderaient une référence vers une photo effacée.
           forgetPiece(piece.id);
-          setDetail(null);
+          closeDetail();
           setPieces(listPieces());
           setOutfits(listOutfits());
         },
       },
     ]);
-  }, []);
+  }, [closeDetail]);
 
   const busy = status !== null;
   const selectedCategory = findCategory(categoryForNewPiece);
@@ -646,12 +678,14 @@ export default function PiecesScreen() {
       <PieceViewer
         piece={detail}
         usage={detail ? usage.get(detail.id) ?? 0 : 0}
+        classifyOnOpen={classifyOnOpen}
+        onCreateOutfit={createOutfitWith}
         onClassify={classify}
         onSort={sortPiece}
         onKeep={keepPiece}
         onRemoveForGood={confirmRemoveForGood}
         onDelete={confirmRemove}
-        onClose={() => setDetail(null)}
+        onClose={closeDetail}
       />
     </Screen>
   );

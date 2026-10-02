@@ -109,7 +109,7 @@ export default function LeavingScreen() {
           <Bobine size={80} />
           <Text style={[typography.title, { color: colors.text, textAlign: 'center' }]}>Rien à sortir</Text>
           <Text style={[typography.body, styles.emptyText, { color: colors.textMuted }]}>
-            Pendant le tri, glisse une pièce vers le haut (« Je trie ») pour la mettre ici.
+            Pendant le tri, glisse une pièce vers la gauche (« Je trie ») pour la mettre ici.
             {left > 0 ? `\nDéjà ${left} pièce${left > 1 ? 's' : ''} sortie${left > 1 ? 's' : ''}.` : ''}
           </Text>
         </View>
