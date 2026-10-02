@@ -5,11 +5,11 @@ import type { Outfit } from './outfits';
 import type { Piece } from './pieces';
 
 /**
- * L'atelier : le défi du jour et les boutons à collectionner.
+ * L'atelier : le défi du jour et les bobinous à collectionner.
  *
  * Tout est **déduit des tenues déjà enregistrées**, rien n'est stocké à part :
  * un défi est réussi si une tenue créée ce jour-là y répond, et le bocal
- * compte les boutons gagnés par les tenues et les défis réussis. Pas de
+ * compte les bobinous gagnés par les tenues et les défis réussis. Pas de
  * fichier de progression à tenir synchronisé, et rien à migrer le jour où les
  * règles changent.
  *
@@ -17,11 +17,11 @@ import type { Piece } from './pieces';
  * catégories des pièces, tenue complète, pièce encore jamais utilisée.
  */
 
-/** Boutons gagnés pour chaque tenue créée. */
+/** Bobinous gagnés pour chaque tenue créée. */
 export const BUTTONS_PER_OUTFIT = 10;
-/** Boutons gagnés en plus quand une tenue réussit le défi du jour. */
+/** Bobinous gagnés en plus quand une tenue réussit le défi du jour. */
 export const BUTTONS_PER_CHALLENGE = 30;
-/** Boutons gagnés pour chaque pièce sortie pour de bon (voir removeForGood). */
+/** Bobinous gagnés pour chaque pièce sortie pour de bon (voir removeForGood). */
 export const BUTTONS_PER_LEFT = 15;
 
 type Context = {

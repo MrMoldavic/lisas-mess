@@ -51,3 +51,5 @@ export {
   BUTTONS_PER_LEFT,
 } from './workshop';
 export type { ChallengeInfo, DayState, OutfitDraftCheck, WorkshopStatus } from './workshop';
+export { getWeather, weatherAnnouncement } from './weather';
+export type { Sky, Weather } from './weather';

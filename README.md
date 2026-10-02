@@ -57,8 +57,10 @@ src/
   components/           Screen, Button, Reveal, ModeSwitch,
                         FilterPills (+ CategoryPills, SeasonPills), CategorySheet
   hooks/useTheme.ts     Thème clair/sombre suivi du système
+  hooks/useWeather.ts   Météo du jour, relue au retour sur l'écran
   theme/                Palette, dégradés, espacements, typographie
-  services/             pieces (stockage disque), cutout (détourage), api
+  services/             pieces (stockage disque), cutout (détourage), api,
+                        weather (météo annoncée par Bobine)
   types/                Catégories, saisons, familles
 assets/                 Images, polices (voir assets/README.md)
 ```
@@ -96,6 +98,18 @@ bundle de l'app, donc lisible par quiconque l'installe.
 
 Les variables sont injectées **au démarrage du bundler** : après modification de
 `.env`, redémarrer `npm start`. Un rechargement de l'app ne suffit pas.
+
+## Météo
+
+Bobine annonce la météo dans l'atelier, avec un conseil de tenue tiré de la
+maxi (l'après-midi), de la mini (le matin) et de la pluie ; à partir de 18 h, c'est celle du
+lendemain. Prévisions **Open-Meteo**, sans clé ni compte, donc rien à mettre
+dans `.env`. La position (`expo-location`) n'est demandée qu'une fois et arrondie
+à une dizaine de kilomètres avant l'appel. Sans autorisation ou sans réseau,
+Bobine ne dit simplement rien de la météo.
+
+L'offre gratuite d'Open-Meteo est réservée à un usage **non commercial** : à
+revoir avant toute publication, comme le détourage.
 
 ## Décision : le détourage doit finir sur l'appareil
 

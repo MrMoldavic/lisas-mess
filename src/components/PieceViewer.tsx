@@ -1,27 +1,53 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useAnimatedValue,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/hooks/useTheme';
 import type { Piece } from '@/services';
 import { fonts } from '@/theme';
-import { CATEGORIES, colorNameForCategory, findCategory } from '@/types';
+import { CATEGORIES, colorNameForCategory, findCategory, softColorNameForCategory } from '@/types';
 import type { CategoryId } from '@/types';
 
+import { Bobine } from './Bobine';
 import { Relief } from './Button';
 import type { Tone } from './Button';
 import { PieceSticker } from './PieceSticker';
+import { FABRIC_INK, Fabric } from './SlotBands';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
+
+/** How far the sewn category tag rises above the coupon's top edge. */
+const TAG_RISE = 16;
+/** How long the classification confirmation stays fully visible, in ms. */
+const NOTICE_HOLD = 1600;
+
+/** What Bobine says about the piece: `strong` is highlighted, `rest` completes the sentence. */
+function bobineSpeech(usage: number, leaving: boolean): { strong: string; rest: string } {
+  if (leaving) return { strong: 'À sortir de ta garde-robe', rest: ' : tu la gardes finalement, ou elle part ?' };
+  if (usage === 0) return { strong: 'Jamais dans une tenue', rest: " pour l'instant : on lui en crée une ?" };
+  const outfits = usage === 1 ? 'une tenue' : `${usage} tenues`;
+  return { strong: `Déjà dans ${outfits}`, rest: usage >= 3 ? ', une valeur sûre !' : ' !' };
+}
 
 type PieceViewerProps = {
   /** `null` ferme la vue. */
   piece: Piece | null;
   /** Nombre de tenues qui utilisent la pièce. */
   usage: number;
-  onClassify: (piece: Piece, category: CategoryId | null) => void;
+  /** Returns `false` when the classification failed, so no confirmation is shown. */
+  onClassify: (piece: Piece, category: CategoryId | null) => boolean;
   /** Met la pièce « À sortir ». */
   onSort: (piece: Piece) => void;
   /** Finalement, on la garde : elle retourne dans les vêtements. */
@@ -50,19 +76,45 @@ export function PieceViewer({
   onDelete,
   onClose,
 }: PieceViewerProps) {
-  const { colors, radius, spacing, typography } = useTheme();
+  const { colors, radius, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const [classifying, setClassifying] = useState(false);
+  const [couponWidth, setCouponWidth] = useState(0);
+  /** Confirmation shown after a classification; `key` replays the animation on each one. */
+  const [notice, setNotice] = useState<{ text: string; key: number } | null>(null);
+  const noticeProgress = useAnimatedValue(0);
 
   const pieceId = piece?.id ?? null;
   useEffect(() => {
     setClassifying(false);
   }, [pieceId]);
 
+  const open = piece !== null;
+  useEffect(() => {
+    if (!open) setNotice(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!notice) return;
+    AccessibilityInfo.announceForAccessibility(notice.text);
+    noticeProgress.setValue(0);
+    const animation = Animated.sequence([
+      Animated.timing(noticeProgress, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.delay(NOTICE_HOLD),
+      Animated.timing(noticeProgress, { toValue: 0, duration: 260, useNativeDriver: true }),
+    ]);
+    animation.start(({ finished }) => {
+      if (finished) setNotice(null);
+    });
+    return () => animation.stop();
+  }, [notice, noticeProgress]);
+
   if (!piece) return null;
 
   const category = findCategory(piece.category);
   const leaving = piece.verdict === 'out';
+  const speech = bobineSpeech(usage, leaving);
+  const strongColor = leaving ? colors.woodDeep : usage === 0 ? colors.primary : colors.secondaryDeep;
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose}>
@@ -89,70 +141,105 @@ export function PieceViewer({
           >
             {(ink) => <Ionicons name="close" size={22} color={ink} />}
           </Relief>
-
-          <View style={[styles.chips, { gap: spacing.xs }]}>
-            <View
-              style={[
-                styles.chip,
-                { backgroundColor: colors[colorNameForCategory(piece.category)], borderRadius: radius.full },
-              ]}
-            >
-              <Text style={[styles.chipText, { color: colors.onPrimary }]}>
-                {category?.label ?? 'À classer'}
-              </Text>
-            </View>
-            <Text style={[styles.usage, { color: usage === 0 ? colors.primary : colors.textMuted }]}>
-              {usage === 0 ? 'Jamais dans une tenue' : `Dans ${usage} tenue${usage > 1 ? 's' : ''}`}
-            </Text>
-          </View>
-
-          <View style={styles.circle} />
         </View>
 
-        {leaving && (
-          <View style={[styles.leavingNote, { backgroundColor: colors.surfaceAlt, borderRadius: radius.full }]}>
-            <Ionicons name="exit" size={16} color={colors.wood} />
-            <Text style={[typography.caption, { color: colors.text }]}>À sortir de ta garde-robe</Text>
-          </View>
-        )}
+        {/* Same fabric coupon as in the composer, tinted by the piece's family, with its category sewn on top. */}
+        <View
+          style={[styles.coupon, { marginTop: TAG_RISE }]}
+          onLayout={(event) => setCouponWidth(event.nativeEvent.layout.width)}
+        >
+          <Fabric color={colors[softColorNameForCategory(piece.category)]} width={couponWidth} pinked />
 
-        {classifying ? (
-          <ScrollView style={styles.body} contentContainerStyle={[styles.options, { gap: spacing.sm }]}>
-            {CATEGORIES.map((option) => {
-              const selected = option.id === piece.category;
-              const color = colors[colorNameForCategory(option.id)];
+          {classifying ? (
+            <ScrollView style={styles.couponContent} contentContainerStyle={[styles.options, { gap: spacing.sm }]}>
+              {CATEGORIES.map((option) => {
+                const selected = option.id === piece.category;
+                const color = colors[colorNameForCategory(option.id)];
 
-              return (
-                <Pressable
-                  key={option.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => {
-                    onClassify(piece, option.id);
-                    setClassifying(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.option,
-                    {
-                      borderRadius: radius.full,
-                      borderColor: color,
-                      backgroundColor: selected ? color : colors.surface,
-                      opacity: pressed ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.optionText, { color: selected ? colors.onPrimary : color }]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : (
-          <View style={styles.body}>
-            <PieceSticker uri={piece.uri} style={styles.sticker} />
+                return (
+                  <Pressable
+                    key={option.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      if (onClassify(piece, option.id)) {
+                        setNotice({ text: `C'est noté : ${option.label} !`, key: Date.now() });
+                      }
+                      setClassifying(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.option,
+                      {
+                        borderRadius: radius.full,
+                        borderColor: color,
+                        backgroundColor: selected ? color : colors.surface,
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.optionText, { color: selected ? colors.onPrimary : color }]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <PieceSticker uri={piece.uri} style={styles.couponContent} />
+          )}
+
+          <View pointerEvents="none" style={styles.tagRow}>
+            <View style={styles.tag}>
+              <View style={[styles.tagHole, { backgroundColor: colors[colorNameForCategory(piece.category)] }]} />
+              <Text style={styles.tagText}>{(category?.label ?? 'À classer').toUpperCase()}</Text>
+            </View>
           </View>
-        )}
+        </View>
+
+        {/* Bobine comments on the piece; a classification confirmation briefly takes her line. */}
+        <View style={[styles.speaker, { gap: spacing.sm }]}>
+          <Bobine size={56} />
+          <View
+            style={[
+              styles.bubble,
+              { backgroundColor: colors.surface, borderBottomColor: colors.surfaceDeep, borderRadius: radius.md },
+            ]}
+          >
+            <View style={[styles.tail, { backgroundColor: colors.surface }]} />
+            <Animated.Text
+              style={[
+                styles.speech,
+                {
+                  color: colors.text,
+                  opacity: notice ? noticeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) : 1,
+                },
+              ]}
+            >
+              <Text style={{ color: strongColor }}>{speech.strong}</Text>
+              {speech.rest}
+            </Animated.Text>
+            {notice && (
+              <Animated.View
+                key={notice.key}
+                pointerEvents="none"
+                style={[
+                  styles.notice,
+                  {
+                    opacity: noticeProgress,
+                    transform: [
+                      { scale: noticeProgress.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+                    ],
+                  },
+                ]}
+              >
+                <Ionicons name="checkmark-circle" size={24} color={colors.secondary} />
+                <Text style={[styles.noticeText, { color: colors.secondaryDeep }]} numberOfLines={1}>
+                  {notice.text}
+                </Text>
+              </Animated.View>
+            )}
+          </View>
+        </View>
 
         <View
           style={[
@@ -224,23 +311,43 @@ function DockAction({ tone, icon, label, onPress, danger = false }: DockActionPr
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bar: { flexDirection: 'row', alignItems: 'center' },
   circle: { width: 46, height: 46 },
-  chips: { alignItems: 'center' },
-  chip: { paddingHorizontal: 14, paddingVertical: 5 },
-  chipText: { fontFamily: fonts.heading, fontSize: 14 },
-  usage: { fontFamily: fonts.bodyBold, fontSize: 12 },
-  leavingNote: {
-    alignSelf: 'center',
+  speaker: { flexDirection: 'row', alignItems: 'center' },
+  bubble: { flex: 1, justifyContent: 'center', minHeight: 60, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 4 },
+  tail: { position: 'absolute', left: -6, top: '50%', marginTop: -7, width: 14, height: 14, transform: [{ rotate: '45deg' }] },
+  speech: { fontFamily: fonts.bodyBold, fontSize: 16, lineHeight: 21 },
+  notice: {
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
-  body: { flex: 1 },
-  sticker: { flex: 1, margin: 12 },
-  options: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingVertical: 12 },
+  noticeText: { fontFamily: fonts.heading, fontSize: 18 },
+  coupon: { flex: 1 },
+  couponContent: { flex: 1, marginTop: 42, marginHorizontal: 18, marginBottom: 20 },
+  tagRow: { position: 'absolute', top: -TAG_RISE, left: 0, right: 0, alignItems: 'center' },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    paddingLeft: 10,
+    paddingRight: 18,
+    paddingVertical: 7,
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+    borderBottomWidth: 3,
+    borderBottomColor: 'rgba(74, 58, 51, 0.18)',
+    transform: [{ rotate: '-2deg' }],
+  },
+  tagHole: { width: 9, height: 9, borderRadius: 4.5 },
+  tagText: { fontFamily: fonts.display, fontSize: 22, letterSpacing: 1.2, color: FABRIC_INK },
+  options: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingVertical: 4 },
   option: { borderWidth: 2, paddingHorizontal: 16, paddingVertical: 8 },
   optionText: { fontFamily: fonts.heading, fontSize: 15 },
   dock: {

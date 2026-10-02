@@ -30,7 +30,13 @@
           "photosPermission": "Lisa's Mess accède à tes photos pour importer un vêtement existant."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lisa's Mess utilise ta position pour que Bobine t'annonce la météo du jour."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

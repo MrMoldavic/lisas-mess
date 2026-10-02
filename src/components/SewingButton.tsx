@@ -15,8 +15,8 @@ type SewingButtonProps = {
 };
 
 /**
- * Un bouton de couture à quatre trous : la monnaie de l'atelier, et le dessin
- * du bouton de tirage au sort du composeur.
+ * Un bouton de couture à quatre trous : le dessin des bobinous, la monnaie de
+ * l'atelier, et celui du bouton de tirage au sort du composeur.
  */
 export function SewingButton({ size, color, holeColor }: SewingButtonProps) {
   const hole = Math.max(2, size * 0.18);

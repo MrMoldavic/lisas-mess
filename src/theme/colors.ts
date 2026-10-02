@@ -43,6 +43,8 @@ export const palette = {
   topSoft: { light: '#FFD4C2', dark: '#EBC5B6' },
   bottomSoft: { light: '#C6E6F5', dark: '#B5D3E1' },
   shoesSoft: { light: '#F8E2A6', dark: '#E5D09A' },
+  // Coupon for pieces that cover the whole outfit (dresses, accessories).
+  fullSoft: { light: '#F9D3DE', dark: '#E6C2CD' },
   // Saisons : teintes franchement distinctes de celles des familles ci-dessus,
   // car les deux jeux de pilules se ressemblent visuellement.
   spring: { light: '#3FA46A', dark: '#6FD49F' },

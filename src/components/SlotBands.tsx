@@ -2,17 +2,9 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/hooks/useTheme';
 import { fonts } from '@/theme';
-import type { ColorName } from '@/theme';
-import { OUTFIT_SLOTS, slotBand } from '@/types';
-import type { OutfitSlot } from '@/types';
+import { OUTFIT_SLOTS, slotBand, softColorNameForFamily } from '@/types';
 
 import type { Canvas } from './GarmentLayer';
-
-const SOFT_COLORS: Record<OutfitSlot, ColorName> = {
-  top: 'topSoft',
-  bottom: 'bottomSoft',
-  shoes: 'shoesSoft',
-};
 
 const GAP = 9;
 
@@ -26,7 +18,7 @@ const TOOTH = 6;
  * Les coupons restent clairs dans les deux thèmes : leur encre (couture,
  * étiquette) est donc fixe, et non tirée du thème.
  */
-const FABRIC_INK = '#4A3A33';
+export const FABRIC_INK = '#4A3A33';
 const SEAM = 'rgba(74, 58, 51, 0.28)';
 
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -58,7 +50,7 @@ export function SlotBands({ canvas }: { canvas: Canvas }) {
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {OUTFIT_SLOTS.map((slot, rank) => {
         const rect = bandRect(rank, canvas);
-        const fabric = colors[SOFT_COLORS[slot.key]];
+        const fabric = colors[softColorNameForFamily(slot.family)];
         const pinked = rank < OUTFIT_SLOTS.length - 1;
 
         return (
@@ -69,20 +61,7 @@ export function SlotBands({ canvas }: { canvas: Canvas }) {
               { left: rect.x, top: rect.y, width: rect.width, height: rect.height },
             ]}
           >
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: fabric, borderRadius: BAND_RADIUS }]} />
-
-            {pinked && (
-              <View style={styles.pinking}>
-                {Array.from({ length: Math.ceil(rect.width / TOOTH) }, (_, i) => (
-                  <View
-                    key={i}
-                    style={[styles.tooth, { left: i * TOOTH + TOOTH / 2 - TOOTH_SIDE / 2, backgroundColor: fabric }]}
-                  />
-                ))}
-              </View>
-            )}
-
-            <View style={styles.seam} />
+            <Fabric color={fabric} width={rect.width} pinked={pinked} />
 
             {/* Étiquette en haut à droite : sur le coupon des chaussures, les flèches
                 sont descendues en bas pour lui laisser la place. */}
@@ -94,6 +73,35 @@ export function SlotBands({ canvas }: { canvas: Canvas }) {
         );
       })}
     </View>
+  );
+}
+
+type FabricProps = {
+  color: string;
+  /** Width of the coupon, to count the teeth of the pinked edge. */
+  width: number;
+  pinked?: boolean;
+};
+
+/** Cloth of a coupon (plain fabric, dashed seam, optional pinked bottom edge), to lay inside a positioned parent. */
+export function Fabric({ color, width, pinked = false }: FabricProps) {
+  return (
+    <>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: BAND_RADIUS }]} />
+
+      {pinked && (
+        <View style={styles.pinking}>
+          {Array.from({ length: Math.ceil(width / TOOTH) }, (_, i) => (
+            <View
+              key={i}
+              style={[styles.tooth, { left: i * TOOTH + TOOTH / 2 - TOOTH_SIDE / 2, backgroundColor: color }]}
+            />
+          ))}
+        </View>
+      )}
+
+      <View style={styles.seam} />
+    </>
   );
 }
 

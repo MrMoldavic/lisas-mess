@@ -245,7 +245,7 @@ export function removePiece(id: string): void {
 /**
  * La pièce est sortie pour de bon : elle quitte l'app (photo effacée, retirée des
  * tenues), et le compteur des pièces sorties avance. C'est lui qui rapporte des
- * boutons, pour qu'on ne puisse pas en gagner en mettant une pièce « À sortir »
+ * bobinous, pour qu'on ne puisse pas en gagner en mettant une pièce « À sortir »
  * puis en la reprenant.
  */
 export function removeForGood(id: string): void {

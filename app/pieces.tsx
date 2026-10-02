@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -60,10 +61,16 @@ import {
 } from '@/types';
 import type { CategoryId, OutfitSlot } from '@/types';
 
-const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+const CAMERA_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
   allowsEditing: true,
   quality: 0.85,
+};
+
+// On iOS, editing forces the legacy in-process picker (slow to open, square crop only) instead of PHPicker.
+const LIBRARY_OPTIONS: ImagePicker.ImagePickerOptions = {
+  ...CAMERA_OPTIONS,
+  allowsEditing: Platform.OS !== 'ios',
 };
 
 type Status = null | 'saving' | 'cutout' | 'trimming';
@@ -244,15 +251,17 @@ export default function PiecesScreen() {
         return;
       }
 
-      const result =
-        source === 'camera'
-          ? await ImagePicker.launchCameraAsync(PICKER_OPTIONS)
-          : await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS);
-
-      if (result.canceled) return;
-      const sourceUri = result.assets[0].uri;
-
+      // Set before the picker resolves, since its native processing (crop, re-encoding) runs before it returns.
+      setStatus('saving');
       try {
+        const result =
+          source === 'camera'
+            ? await ImagePicker.launchCameraAsync(CAMERA_OPTIONS)
+            : await ImagePicker.launchImageLibraryAsync(LIBRARY_OPTIONS);
+
+        if (result.canceled) return;
+        const sourceUri = result.assets[0].uri;
+
         if (isCutoutConfigured()) {
           setStatus('cutout');
           try {
@@ -265,7 +274,6 @@ export default function PiecesScreen() {
             Alert.alert('Détourage impossible', `${error}\n\nLa photo a été gardée telle quelle.`);
           }
         } else {
-          setStatus('saving');
           await addPiece(sourceUri, categoryForNewPiece);
         }
 
@@ -285,8 +293,10 @@ export default function PiecesScreen() {
         // Reclasser renomme le fichier : la pièce affichée change d'identifiant.
         const renamed = setPieceCategory(piece.id, category);
         refresh(renamed.id);
+        return true;
       } catch (error) {
         Alert.alert('Classement impossible', String(error));
+        return false;
       }
     },
     [refresh]
@@ -312,7 +322,7 @@ export default function PiecesScreen() {
     (piece: Piece) => {
       Alert.alert(
         'Supprimer définitivement ?',
-        `La photo est effacée et la pièce quitte ses tenues. +${BUTTONS_PER_LEFT} boutons dans ton bocal.`,
+        `La photo est effacée et la pièce quitte ses tenues. +${BUTTONS_PER_LEFT} bobinous dans ton bocal.`,
         [
           { text: 'Annuler', style: 'cancel' },
           {

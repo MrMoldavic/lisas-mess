@@ -59,6 +59,24 @@ const FAMILY_COLORS: Record<Family, ColorName> = {
   full: 'primary',
 };
 
+/** Fabric tint of each family's coupon, shared by the composer and the piece view. */
+const FAMILY_SOFT_COLORS: Record<Family, ColorName> = {
+  top: 'topSoft',
+  bottom: 'bottomSoft',
+  shoes: 'shoesSoft',
+  full: 'fullSoft',
+};
+
+export function softColorNameForFamily(family: Family): ColorName {
+  return FAMILY_SOFT_COLORS[family];
+}
+
+/** Unclassified pieces get plain linen. */
+export function softColorNameForCategory(id: string | null): ColorName {
+  const category = findCategory(id);
+  return category ? FAMILY_SOFT_COLORS[category.family] : 'surfaceAlt';
+}
+
 export type SeasonId = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export type Season = {

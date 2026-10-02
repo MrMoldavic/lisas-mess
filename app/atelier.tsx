@@ -8,27 +8,52 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bobine, Button, Relief, Reveal, SewingButton } from '@/components';
 import type { Tone } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
+import { useWeather } from '@/hooks/useWeather';
 import {
   leftCount,
   isLeaving,
   listOutfits,
   listPieces,
   sortQueue,
+  weatherAnnouncement,
   workshopStatus,
 } from '@/services';
-import type { DayState, Outfit, Piece, WorkshopStatus } from '@/services';
+import type { DayState, Outfit, Piece, Sky, Weather, WorkshopStatus } from '@/services';
 import { fonts } from '@/theme';
+import type { ColorName } from '@/theme';
 import { familyForCategory } from '@/types';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
+const SKY_ICONS: Record<Sky, IconName> = {
+  sun: 'sunny',
+  clouds: 'partly-sunny',
+  overcast: 'cloudy',
+  fog: 'cloudy',
+  drizzle: 'rainy',
+  rain: 'rainy',
+  snow: 'snow',
+  storm: 'thunderstorm',
+};
+
+const SKY_COLORS: Record<Sky, ColorName> = {
+  sun: 'accentDeep',
+  clouds: 'accentDeep',
+  overcast: 'textMuted',
+  fog: 'textMuted',
+  drizzle: 'winter',
+  rain: 'winter',
+  snow: 'winter',
+  storm: 'winter',
+};
+
 /** Ce que Bobine dit en ouvrant l'atelier. */
 function bobineSays(status: WorkshopStatus, pieceCount: number, now: Date): string {
   if (pieceCount === 0) return "Bienvenue à l'atelier ! Commence par photographier une pièce.";
   if (status.challengeDone) {
-    return `Défi réussi, bravo ! +${status.challenge?.reward ?? 0} boutons dans ton bocal.`;
+    return `Défi réussi, bravo ! +${status.challenge?.reward ?? 0} bobinous dans ton bocal.`;
   }
 
   const hour = now.getHours();
@@ -41,7 +66,7 @@ const STEP = 110;
 /**
  * Page principale de l'atelier, de haut en bas : Bobine qui parle, le défi du jour et
  * sa semaine, les quatre rubriques en grandes icônes, et le bilan (pièces,
- * tenues, boutons) calé en bas de l'écran.
+ * tenues, bobinous) calé en bas de l'écran.
  *
  * Relu à chaque retour sur l'écran, pour que le défi et le bocal suivent les
  * tenues qu'on vient de créer.
@@ -53,6 +78,7 @@ export default function AtelierScreen() {
 
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [outfits, setOutfits] = useState<Outfit[]>([]);
+  const weather = useWeather();
 
   useFocusEffect(
     useCallback(() => {
@@ -105,9 +131,16 @@ export default function AtelierScreen() {
             <Text style={[styles.nameText, { color: colors.onPrimary }]}>Bobine</Text>
           </View>
           <Bobine size={46} />
-          <Text style={[styles.dialogText, { color: colors.text }]}>
-            {bobineSays(status, pieces.length, new Date())}
-          </Text>
+          <View style={[styles.dialogBody, { gap: spacing.sm }]}>
+            <Text style={[styles.dialogText, { color: colors.text }]}>
+              {bobineSays(status, pieces.length, new Date())}
+            </Text>
+            {weather && (
+              <Reveal travel={6}>
+                <WeatherLine weather={weather} />
+              </Reveal>
+            )}
+          </View>
         </View>
       </Reveal>
 
@@ -218,7 +251,7 @@ export default function AtelierScreen() {
       {/* Bilan, calé en bas de l'écran. */}
       <View
         accessible
-        accessibilityLabel={`${pieces.length} pièces, ${outfits.length} tenues, ${status.buttons} boutons`}
+        accessibilityLabel={`${pieces.length} pièces, ${outfits.length} tenues, ${status.buttons} bobinous`}
         style={[
           styles.summary,
           {
@@ -236,7 +269,7 @@ export default function AtelierScreen() {
         <View style={styles.jar}>
           <SewingButton size={16} color={colors.accent} holeColor={colors.accentDeep} />
           <Text style={[styles.summaryButtons, { color: colors.accentDeep }]}>
-            {status.buttons} boutons
+            {status.buttons} bobinous
           </Text>
         </View>
       </View>
@@ -267,6 +300,18 @@ function WeekDay({ state, letter, ink }: { state: DayState; letter: string; ink:
       <Text style={[styles.dayLetter, { color: ink, opacity: state === 'future' ? 0.5 : 0.85 }]}>
         {letter}
       </Text>
+    </View>
+  );
+}
+
+/** Bobine's weather announcement, under her greeting. */
+function WeatherLine({ weather }: { weather: Weather }) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.weather}>
+      <Ionicons name={SKY_ICONS[weather.sky]} size={18} color={colors[SKY_COLORS[weather.sky]]} />
+      <Text style={[styles.weatherText, { color: colors.text }]}>{weatherAnnouncement(weather)}</Text>
     </View>
   );
 }
@@ -330,7 +375,10 @@ const styles = StyleSheet.create({
   },
   nameHole: { width: 5, height: 5, borderRadius: 3 },
   nameText: { fontFamily: fonts.heading, fontSize: 13 },
-  dialogText: { flex: 1, fontFamily: fonts.bodyBold, fontSize: 15, lineHeight: 20 },
+  dialogBody: { flex: 1 },
+  dialogText: { fontFamily: fonts.bodyBold, fontSize: 15, lineHeight: 20 },
+  weather: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  weatherText: { flex: 1, fontFamily: fonts.body, fontSize: 14, lineHeight: 19 },
 
   challenge: { flexDirection: 'column', alignItems: 'stretch' },
   stitch: {

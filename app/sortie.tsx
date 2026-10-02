@@ -49,7 +49,7 @@ export default function LeavingScreen() {
     (piece: Piece) => {
       Alert.alert(
         'Supprimer définitivement ?',
-        `La photo est effacée et la pièce quitte ses tenues. +${BUTTONS_PER_LEFT} boutons dans ton bocal.`,
+        `La photo est effacée et la pièce quitte ses tenues. +${BUTTONS_PER_LEFT} bobinous dans ton bocal.`,
         [
           { text: 'Annuler', style: 'cancel' },
           {
@@ -70,7 +70,7 @@ export default function LeavingScreen() {
     const count = pieces.length;
     Alert.alert(
       `Supprimer les ${count} pièces ?`,
-      `Leurs photos sont effacées et elles quittent leurs tenues. +${count * BUTTONS_PER_LEFT} boutons dans ton bocal.`,
+      `Leurs photos sont effacées et elles quittent leurs tenues. +${count * BUTTONS_PER_LEFT} bobinous dans ton bocal.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
