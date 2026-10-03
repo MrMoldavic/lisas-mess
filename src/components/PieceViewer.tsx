@@ -26,8 +26,8 @@ import {
 } from '@/types';
 import type { CategoryId } from '@/types';
 
-import { Bobine } from './Bobine';
 import { Relief } from './Button';
+import { Mascot } from './Mascot';
 import type { Tone } from './Button';
 import { PieceSticker } from './PieceSticker';
 import { FABRIC_INK, Fabric } from './SlotBands';
@@ -220,7 +220,7 @@ export function PieceViewer({
 
         {/* Bobine comments on the piece; a classification confirmation briefly takes her line. */}
         <View style={[styles.speaker, { gap: spacing.sm }]}>
-          <Bobine size={56} />
+          <Mascot size={56} />
           <View
             style={[
               styles.bubble,

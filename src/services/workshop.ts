@@ -26,8 +26,8 @@ export const BUTTONS_PER_LEFT = 15;
 
 type Context = {
   pieceById: Map<string, Piece>;
-  /** Tenues créées avant celle qu'on examine. */
-  earlier: Outfit[];
+  /** Pieces worn by the outfits created before the one examined, kept up to date as outfits are walked through. */
+  used: Set<string>;
 };
 
 type Challenge = {
@@ -50,11 +50,13 @@ export type WorkshopStatus = {
   weekElapsed: number;
   /** Les sept jours de la semaine, du lundi au dimanche. */
   week: DayState[];
+  /** Day keys (AAAA-MM-JJ) of the seven days of `week`, to catch one up with a joker. */
+  weekDays: string[];
   buttons: number;
 };
 
 /** État d'un jour dans la semaine des défis. */
-export type DayState = 'done' | 'missed' | 'today' | 'future';
+export type DayState = 'done' | 'joker' | 'missed' | 'today' | 'future';
 
 function piecesOf(outfit: Outfit, pieceById: Map<string, Piece>): Piece[] {
   return OUTFIT_SLOTS.flatMap((slot) => {
@@ -108,8 +110,7 @@ const CHALLENGES: Challenge[] = [
     id: 'fresh',
     label: 'Une tenue avec une pièce encore jamais utilisée',
     feasible: (pieces) => pieces.length > 0,
-    matches: (outfit, { pieceById, earlier }) => {
-      const used = new Set(earlier.flatMap((o) => OUTFIT_SLOTS.map((slot) => o[slot.key])));
+    matches: (outfit, { pieceById, used }) => {
       return piecesOf(outfit, pieceById).some((piece) => !used.has(piece.id));
     },
   },
@@ -134,11 +135,20 @@ function challengeFor(day: string, feasible: Challenge[]): Challenge | null {
   return feasible.length === 0 ? null : feasible[hash(day) % feasible.length];
 }
 
+/** Bobinous earned at the last computation, so a screen can show them before computing again. */
+let lastEarned: number | null = null;
+
+export function lastEarnedBobinous(): number | null {
+  return lastEarned;
+}
+
 export function workshopStatus(
   pieces: Piece[],
   outfits: Outfit[],
   /** Pièces déjà sorties de l'app (voir leftCount). */
   left: number = 0,
+  /** Missed days caught up with a joker: they count in the week, but earn no bobinous. */
+  jokerDays: string[] = [],
   now: number = Date.now()
 ): WorkshopStatus {
   const pieceById = new Map(pieces.map((piece) => [piece.id, piece]));
@@ -147,15 +157,18 @@ export function workshopStatus(
 
   /** Jours dont le défi a été réussi. */
   const succeeded = new Set<string>();
-  chronological.forEach((outfit, index) => {
+  // Linear walk: the pieces already worn grow as we go, instead of re-reading every earlier outfit.
+  const used = new Set<string>();
+  for (const outfit of chronological) {
     const day = dayKey(outfit.createdAt);
-    if (succeeded.has(day)) return;
-
-    const challenge = challengeFor(day, feasible);
-    if (challenge?.matches(outfit, { pieceById, earlier: chronological.slice(0, index) })) {
+    if (!succeeded.has(day) && challengeFor(day, feasible)?.matches(outfit, { pieceById, used })) {
       succeeded.add(day);
     }
-  });
+    for (const slot of OUTFIT_SLOTS) {
+      const id = outfit[slot.key];
+      if (id) used.add(id);
+    }
+  }
 
   const today = dayKey(now);
   const challenge = challengeFor(today, feasible);
@@ -163,12 +176,16 @@ export function workshopStatus(
   // Semaine du lundi au dimanche, autour d'aujourd'hui.
   const DAY = 24 * 60 * 60 * 1000;
   const weekday = (new Date(now).getDay() + 6) % 7;
-  const week = Array.from({ length: 7 }, (_, i): DayState => {
-    if (succeeded.has(dayKey(now + (i - weekday) * DAY))) return 'done';
-    if (i < weekday) return 'missed';
+  const weekDays = Array.from({ length: 7 }, (_, i) => dayKey(now + (i - weekday) * DAY));
+  const week = weekDays.map((day, i): DayState => {
+    if (succeeded.has(day)) return 'done';
+    if (i < weekday) return jokerDays.includes(day) ? 'joker' : 'missed';
     return i === weekday ? 'today' : 'future';
   });
-  const weekDone = week.filter((day) => day === 'done').length;
+  const weekDone = week.filter((day) => day === 'done' || day === 'joker').length;
+
+  lastEarned =
+    outfits.length * BUTTONS_PER_OUTFIT + succeeded.size * BUTTONS_PER_CHALLENGE + left * BUTTONS_PER_LEFT;
 
   return {
     challenge: challenge ? { id: challenge.id, label: challenge.label, reward: BUTTONS_PER_CHALLENGE } : null,
@@ -176,10 +193,8 @@ export function workshopStatus(
     weekDone,
     weekElapsed: weekday + 1,
     week,
-    buttons:
-      outfits.length * BUTTONS_PER_OUTFIT +
-      succeeded.size * BUTTONS_PER_CHALLENGE +
-      left * BUTTONS_PER_LEFT,
+    weekDays,
+    buttons: lastEarned,
   };
 }
 
@@ -202,7 +217,8 @@ export function challengeCheck(
   const challenge = challengeFor(dayKey(now), feasible);
   if (!challenge) return null;
 
-  const context = { pieceById: new Map(pieces.map((piece) => [piece.id, piece])), earlier: outfits };
+  const used = new Set(outfits.flatMap((outfit) => OUTFIT_SLOTS.flatMap((slot) => outfit[slot.key] ?? [])));
+  const context = { pieceById: new Map(pieces.map((piece) => [piece.id, piece])), used };
 
   return (draft) =>
     challenge.matches(

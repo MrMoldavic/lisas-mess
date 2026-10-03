@@ -1,5 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 
+import { OUTFIT_SLOTS } from '@/types';
 import type { OutfitSlot, SeasonId } from '@/types';
 
 import type { PieceLayout } from './pieceLayouts';
@@ -117,7 +118,7 @@ export function addOutfit(draft: OutfitDraft): Outfit {
 }
 
 /**
- * Remplace les vêtements d'une tenue existante.
+ * Remplace les vêtements et la saison d'une tenue existante.
  *
  * Le cadrage d'un poste dont le vêtement change est oublié : il avait été réglé
  * pour l'ancien vêtement et n'a aucun sens pour le nouveau. Les postes inchangés
@@ -125,23 +126,20 @@ export function addOutfit(draft: OutfitDraft): Outfit {
  *
  * @throws {DuplicateOutfitError} si une autre tenue a déjà cette combinaison.
  */
-export function updateOutfitPieces(
-  id: string,
-  pieces: Pick<Outfit, OutfitSlot>
-): Outfit | null {
+export function updateOutfit(id: string, draft: OutfitDraft): Outfit | null {
   const outfits = readAll();
   const current = outfits.find((outfit) => outfit.id === id);
   if (!current) return null;
 
-  const existing = findDuplicate({ ...pieces, season: current.season }, id);
+  const existing = findDuplicate(draft, id);
   if (existing) throw new DuplicateOutfitError(existing);
 
   const layouts = { ...current.layouts };
-  for (const slot of Object.keys(pieces) as OutfitSlot[]) {
-    if (pieces[slot] !== current[slot]) delete layouts[slot];
+  for (const { key } of OUTFIT_SLOTS) {
+    if (draft[key] !== current[key]) delete layouts[key];
   }
 
-  const updated: Outfit = { ...current, ...pieces, layouts };
+  const updated: Outfit = { ...current, ...draft, layouts };
   writeAll(outfits.map((outfit) => (outfit.id === id ? updated : outfit)));
   return updated;
 }

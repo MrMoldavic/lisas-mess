@@ -1,12 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Bobine, Button, RELIEF_DEPTH, Relief, Reveal, SewingButton } from '@/components';
+import { Button, FabricPattern, Mascot, RELIEF_DEPTH, Relief, Reveal, SewingButton } from '@/components';
 import type { Tone } from '@/components';
+import { iconPack } from '@/components/iconPacks';
+import { voiceFor } from '@/components/voices';
+import { useShop } from '@/hooks/useShop';
 import { useTheme } from '@/hooks/useTheme';
 import { useWeather } from '@/hooks/useWeather';
 import {
@@ -16,6 +19,12 @@ import {
   listPieces,
   sortQueue,
   weatherAnnouncement,
+  findShopItem,
+  shrinkExistingPieces,
+  ensureThumbnails,
+  jokersLeft,
+  spendJoker,
+  bobinousBalance,
   workshopStatus,
 } from '@/services';
 import type { DayState, Outfit, Piece, Sky, Weather, WorkshopStatus } from '@/services';
@@ -49,17 +58,17 @@ const SKY_COLORS: Record<Sky, ColorName> = {
   storm: 'winter',
 };
 
-/** Ce que Bobine dit en ouvrant l'atelier. */
-function bobineSays(status: WorkshopStatus, pieceCount: number, now: Date): string {
-  if (pieceCount === 0) return "Bienvenue à l'atelier ! Commence par photographier une pièce.";
-  if (status.challengeDone) {
-    return `Défi réussi, bravo ! +${status.challenge?.reward ?? 0} bobinous dans ton bocal.`;
-  }
+/** Ce que Bobine dit en ouvrant l'atelier, dans le ton choisi en boutique. */
+function bobineSays(status: WorkshopStatus, pieceCount: number, now: Date, voiceId: string | null): string {
+  const voice = voiceFor(voiceId);
+  if (pieceCount === 0) return voice.welcome;
+  if (status.challengeDone) return voice.done(status.challenge?.reward ?? 0);
 
   const hour = now.getHours();
-  const hello = hour < 12 ? 'Bonjour Lisa !' : hour < 18 ? 'Coucou Lisa !' : 'Bonsoir Lisa !';
-  return `${hello} Un nouveau défi t'attend, on se crée une tenue ?`;
+  const hello = voice.hello[hour < 12 ? 0 : hour < 18 ? 1 : 2];
+  return `${hello} ${voice.prompt}`;
 }
+
 
 const STEP = 110;
 
@@ -101,6 +110,7 @@ export default function AtelierScreen() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const weather = useWeather();
+  const shop = useShop();
   const [appsArea, setAppsArea] = useState({ width: 0, height: 0 });
   const [pageHeight, setPageHeight] = useState(0);
   /** Bottom of the summary, i.e. the natural height of the page content. */
@@ -113,7 +123,43 @@ export default function AtelierScreen() {
     }, [])
   );
 
-  const status = useMemo(() => workshopStatus(pieces, outfits, leftCount()), [pieces, outfits]);
+  // Photos saved at full resolution slow every screen down: shrink them once, after the first render.
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Then the small copies used by the grids, for photos saved before they existed.
+      shrinkExistingPieces()
+        .then(async (shrunk) => shrunk + (await ensureThumbnails()))
+        .then((changed) => {
+          if (changed > 0) setPieces(listPieces());
+        });
+    });
+    return () => task.cancel();
+  }, []);
+
+  const status = useMemo(
+    () => workshopStatus(pieces, outfits, leftCount(), shop.jokerDays),
+    [pieces, outfits, shop.jokerDays]
+  );
+  const icons = iconPack(shop.icons);
+
+  /** A missed day of the week is caught up with a joker, bought in the shop. */
+  const catchUp = (day: string) => {
+    const left = jokersLeft(shop);
+    if (left <= 0) {
+      Alert.alert('Jour raté', 'Un joker peut le rattraper : la boutique en vend.', [
+        { text: 'Plus tard', style: 'cancel' },
+        { text: 'Boutique', onPress: () => router.push('/boutique') },
+      ]);
+      return;
+    }
+    const after = left - 1;
+    Alert.alert('Utiliser un joker ?', `Ce jour comptera dans ta semaine. Il te restera ${after} joker${after > 1 ? 's' : ''}.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Utiliser', onPress: () => spendJoker(day) },
+    ]);
+  };
+  const bobinous = bobinousBalance(status.buttons, shop);
+  const companion = findShopItem(shop.avatar)?.name ?? 'Bobine';
   // Seules les familles proposées au tri comptent : hauts, bas, chaussures.
   const sortable = useMemo(
     () =>
@@ -141,6 +187,7 @@ export default function AtelierScreen() {
         paddingBottom: insets.bottom + spacing.md,
       }}
     >
+      <FabricPattern />
       <View
         style={[
           styles.content,
@@ -163,12 +210,12 @@ export default function AtelierScreen() {
           >
             <View style={[styles.nameTag, { backgroundColor: colors.primary, borderBottomColor: colors.primaryDeep }]}>
               <View style={[styles.nameHole, { backgroundColor: colors.surface }]} />
-              <Text style={[styles.nameText, { color: colors.onPrimary }]}>Bobine</Text>
+              <Text style={[styles.nameText, { color: colors.onPrimary }]}>{companion}</Text>
             </View>
-            <Bobine size={46} />
+            <Mascot size={46} />
             <View style={[styles.dialogBody, { gap: spacing.sm }]}>
               <Text style={[styles.dialogText, { color: colors.text }]}>
-                {bobineSays(status, pieces.length, new Date())}
+                {bobineSays(status, pieces.length, new Date(), shop.voice)}
               </Text>
               {weather && (
                 <Reveal travel={6}>
@@ -224,7 +271,13 @@ export default function AtelierScreen() {
                 {status.challenge && (
                   <View style={styles.week}>
                     {status.week.map((day, i) => (
-                      <WeekDay key={i} state={day} letter={WEEKDAYS[i]} ink={ink} />
+                      <WeekDay
+                        key={i}
+                        state={day}
+                        letter={WEEKDAYS[i]}
+                        ink={ink}
+                        onPress={day === 'missed' ? () => catchUp(status.weekDays[i]) : undefined}
+                      />
                     ))}
                   </View>
                 )}
@@ -279,33 +332,33 @@ export default function AtelierScreen() {
               size={iconSize}
               columns={columns}
               tone="primary"
-              icon="shirt"
+              icon={icons.pieces}
               label="Garde-robe"
               onPress={() => router.push('/pieces')}
             />
             <AppIcon
               size={iconSize}
               columns={columns}
-              tone="secondary"
-              icon="sparkles"
-              label="Créer"
-              onPress={() => router.push('/tenue')}
-            />
-            <AppIcon
-              size={iconSize}
-              columns={columns}
               tone="accent"
-              icon="albums"
+              icon={icons.outfits}
               label="Mes tenues"
               onPress={() => router.push({ pathname: '/pieces', params: { mode: 'outfits' } })}
             />
             <AppIcon
               size={iconSize}
               columns={columns}
+              tone="secondary"
+              icon={icons.create}
+              label="Créer"
+              onPress={() => router.push('/tenue')}
+            />
+            <AppIcon
+              size={iconSize}
+              columns={columns}
               tone="wood"
-              icon="dice"
-              label="Au hasard"
-              onPress={() => router.push({ pathname: '/tenue', params: { surprise: '1' } })}
+              icon={icons.shop}
+              label="Boutique"
+              onPress={() => router.push('/boutique')}
             />
           </View>
         </Reveal>
@@ -320,7 +373,7 @@ export default function AtelierScreen() {
           <Reveal delay={STEP * 2.5}>
             <View
               accessible
-              accessibilityLabel={`${pieces.length} pièces, ${outfits.length} tenues, ${status.buttons} bobinous`}
+              accessibilityLabel={`${pieces.length} pièces, ${outfits.length} tenues, ${bobinous} bobinous`}
               style={[
                 styles.summary,
                 {
@@ -338,7 +391,7 @@ export default function AtelierScreen() {
               <View style={styles.jar}>
                 <SewingButton size={16} color={colors.accent} holeColor={colors.accentDeep} />
                 <Text style={[styles.summaryButtons, { color: colors.accentDeep }]}>
-                  {status.buttons} bobinous
+                  {bobinous} bobinous
                 </Text>
               </View>
             </View>
@@ -349,14 +402,33 @@ export default function AtelierScreen() {
   );
 }
 
-/** Un jour de la semaine des défis : un bouton cousu s'il est réussi. */
-function WeekDay({ state, letter, ink }: { state: DayState; letter: string; ink: string }) {
+type WeekDayProps = {
+  state: DayState;
+  letter: string;
+  ink: string;
+  /** Only for a missed day, which a joker can catch up. */
+  onPress?: () => void;
+};
+
+/** Un jour de la semaine des défis : un bouton cousu s'il est réussi, une étoile s'il est rattrapé par un joker. */
+function WeekDay({ state, letter, ink, onPress }: WeekDayProps) {
   const { colors } = useTheme();
 
   return (
-    <View style={styles.day}>
+    <Pressable
+      disabled={!onPress}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? 'Rattraper ce jour avec un joker' : undefined}
+      style={styles.day}
+    >
       {state === 'done' ? (
         <SewingButton size={20} color={colors.primary} holeColor={colors.primaryDeep} />
+      ) : state === 'joker' ? (
+        <View style={[styles.dayJoker, { backgroundColor: colors.secondary }]}>
+          <Ionicons name="star" size={11} color={colors.onSecondary} />
+        </View>
       ) : (
         <View
           style={[
@@ -372,7 +444,7 @@ function WeekDay({ state, letter, ink }: { state: DayState; letter: string; ink:
       <Text style={[styles.dayLetter, { color: ink, opacity: state === 'future' ? 0.5 : 0.85 }]}>
         {letter}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -498,6 +570,7 @@ const styles = StyleSheet.create({
   week: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
   day: { alignItems: 'center', gap: 3 },
   dayEmpty: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
+  dayJoker: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   dayLetter: { fontFamily: fonts.heading, fontSize: 11 },
 
   appsArea: { flex: 1 },

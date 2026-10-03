@@ -254,7 +254,9 @@ export function GarmentLayer({
   const outlineDirections =
     lite || canvas.width <= 250 ? OUTLINE_DIRECTIONS.slice(0, 4) : OUTLINE_DIRECTIONS;
 
-  const ratio = useAspectRatio(piece?.uri ?? null);
+  // Thumbnails (lite) draw the small copy: the grids show many garments at once.
+  const photoUri = piece ? (lite ? piece.thumbUri : piece.uri) : null;
+  const ratio = useAspectRatio(photoUri);
   const geometry = useMemo(
     () => (ratio ? fitInBand(bandRect(slot, canvas), ratio, tilt, outline, anchor, maxWidth) : null),
     // `canvas` est recréé à chaque rendu par les appelants : on suit ses dimensions.
@@ -398,7 +400,7 @@ export function GarmentLayer({
         <View style={[styles.sticker, { ...geometry.photo, transform: [{ rotate: `${tilt}deg` }] }]}>
         {/* Ombre portée : une copie noire décalée vers le bas, sans flou. */}
         <Image
-          source={{ uri: piece.uri }}
+          source={{ uri: photoUri ?? piece.uri }}
           resizeMode="contain"
           style={[
             styles.copy,
@@ -410,7 +412,7 @@ export function GarmentLayer({
         {outlineDirections.map(([dx, dy]) => (
           <Image
             key={`${dx},${dy}`}
-            source={{ uri: piece.uri }}
+            source={{ uri: photoUri ?? piece.uri }}
             resizeMode="contain"
             style={[
               styles.copy,
@@ -419,7 +421,7 @@ export function GarmentLayer({
             ]}
           />
         ))}
-        <Image source={{ uri: piece.uri }} style={styles.photo} resizeMode="contain" />
+        <Image source={{ uri: photoUri ?? piece.uri }} style={styles.photo} resizeMode="contain" />
         </View>
       </Animated.View>
     ) : null;

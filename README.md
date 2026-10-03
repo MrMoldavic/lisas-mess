@@ -80,7 +80,10 @@ L'alias `@/` pointe vers `src/` (configuré dans `tsconfig.json`).
   dans ce composant et nulle part ailleurs.
 - **Stockage des pièces** : un fichier par photo dans le dossier `document` de
   l'app, nommé `<horodatage>__<catégorie>.<ext>`. Le dossier **est** l'index — pas
-  de base de données. Reclasser = renommer. Ça tiendra jusqu'à ce qu'une pièce
+  de base de données. Les photos sont plafonnées à 1600 px à l'import, et une
+  miniature de 512 px du même nom vit dans `pieces-thumbs/` pour les grilles et
+  les vignettes de tenues (l'appli doit tenir avec des centaines de pièces et de
+  tenues : toute liste passe par une `FlatList`). Reclasser = renommer. Ça tiendra jusqu'à ce qu'une pièce
   porte plusieurs attributs (couleur, saison, compteur de port) ; il faudra alors
   une vraie table.
 
@@ -110,6 +113,21 @@ Bobine ne dit simplement rien de la météo.
 
 L'offre gratuite d'Open-Meteo est réservée à un usage **non commercial** : à
 revoir avant toute publication, comme le détourage.
+
+## Boutique
+
+Les bobinous se gagnent en créant des tenues, en relevant les défis et en
+sortant des pièces (`src/services/workshop.ts`, tout est déduit des tenues). Ils
+se dépensent dans la boutique : compagnons qui remplacent Bobine
+(`src/components/Avatars.tsx`), accessoires, personnalité, tissus et motifs de
+fond, confettis, cadres de tenue, packs d'icônes, et jokers (consommables qui
+rattrapent un jour de défi raté, sans rapporter de bobinous). Les achats et les articles
+choisis sont écrits dans `shop.json` (`src/services/shop.ts`) ; le solde affiché
+est donc « gagnés − dépensés ».
+
+Un tissu ne remplace que les surfaces du thème clair (`fabrics` dans
+`src/theme/colors.ts`) ; `useTheme()` suit le tissu choisi, donc tout écran qui
+passe par lui change de fond sans autre code.
 
 ## Décision : le détourage doit finir sur l'appareil
 

@@ -7,15 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { fonts } from '@/theme';
 import { DEFAULT_LAYOUT, isLeaving } from '@/services';
-import type { Outfit, Piece } from '@/services';
+import type { Outfit, OutfitDraft, Piece } from '@/services';
 import { OUTFIT_SLOTS, colorNameForSeason, familyForCategory, findSeason } from '@/types';
 import type { OutfitSlot, SeasonId } from '@/types';
 
 import { GarmentLayer } from './GarmentLayer';
 import { Relief } from './Button';
+import { SeasonPills } from './SeasonPills';
 import { SlotBands } from './SlotBands';
-
-type Selection = Record<OutfitSlot, string | null>;
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 type OutfitViewerProps = {
@@ -24,8 +23,8 @@ type OutfitViewerProps = {
   /** Les pièces de la garde-robe, indexées par identifiant. */
   pieces: Map<string, Piece>;
   onToggleFavorite: (outfit: Outfit) => void;
-  /** Enregistre les vêtements choisis en mode modification ; `false` garde le mode ouvert. */
-  onChangePieces: (outfit: Outfit, selection: Selection) => boolean;
+  /** Enregistre les vêtements et la saison choisis en mode modification ; `false` garde le mode ouvert. */
+  onChange: (outfit: Outfit, draft: OutfitDraft) => boolean;
   /** Oublie le cadrage propre à la tenue : elle repart des défauts des pièces. */
   onResetFraming: (outfit: Outfit) => void;
   onDelete: (outfit: Outfit) => void;
@@ -42,8 +41,8 @@ const SEASON_ICONS: Record<SeasonId, IconName> = {
 /** Suffixe d'opacité hexadécimal (~15 %) pour teinter un fond avec une couleur de la palette. */
 const TINT = '26';
 
-function selectionOf(outfit: Outfit): Selection {
-  return { top: outfit.top, bottom: outfit.bottom, shoes: outfit.shoes };
+function draftOf(outfit: Outfit): OutfitDraft {
+  return { top: outfit.top, bottom: outfit.bottom, shoes: outfit.shoes, season: outfit.season };
 }
 
 /**
@@ -60,7 +59,7 @@ export function OutfitViewer({
   outfit,
   pieces,
   onToggleFavorite,
-  onChangePieces,
+  onChange,
   onResetFraming,
   onDelete,
   onClose,
@@ -71,7 +70,7 @@ export function OutfitViewer({
   const [canvas, setCanvas] = useState({ width: 0, height: 0 });
   const [editing, setEditing] = useState(false);
   /** Brouillon du mode modification ; la tenue n'est écrite qu'à l'enregistrement. */
-  const [draft, setDraft] = useState<Selection>({ top: null, bottom: null, shoes: null });
+  const [draft, setDraft] = useState<OutfitDraft>({ top: null, bottom: null, shoes: null, season: null });
 
   // Ouvrir une autre tenue (ou fermer la vue) quitte le mode modification.
   const outfitId = outfit?.id ?? null;
@@ -98,17 +97,18 @@ export function OutfitViewer({
   if (!outfit) return null;
 
   const season = findSeason(outfit.season);
-  const shown = editing ? draft : selectionOf(outfit);
-  const changed = OUTFIT_SLOTS.some((slot) => draft[slot.key] !== outfit[slot.key]);
+  const shown = editing ? draft : draftOf(outfit);
+  const changed =
+    draft.season !== outfit.season || OUTFIT_SLOTS.some((slot) => draft[slot.key] !== outfit[slot.key]);
   const hasFraming = Object.keys(outfit.layouts).length > 0;
 
   const startEditing = () => {
-    setDraft(selectionOf(outfit));
+    setDraft(draftOf(outfit));
     setEditing(true);
   };
 
   const save = () => {
-    if (!changed || onChangePieces(outfit, draft)) setEditing(false);
+    if (!changed || onChange(outfit, draft)) setEditing(false);
   };
 
   return (
@@ -159,6 +159,13 @@ export function OutfitViewer({
             />
           )}
         </View>
+
+        {editing && (
+          <SeasonPills
+            selected={draft.season ?? 'all'}
+            onSelect={(filter) => setDraft((current) => ({ ...current, season: filter === 'all' ? null : filter }))}
+          />
+        )}
 
         <View
           style={styles.silhouette}
@@ -218,7 +225,7 @@ export function OutfitViewer({
           <View style={[styles.hint, { backgroundColor: colors.surfaceAlt, borderRadius: radius.full }]}>
             <Ionicons name="swap-horizontal" size={16} color={colors.textMuted} />
             <Text style={[typography.caption, { color: colors.textMuted }]}>
-              Change une pièce avec les flèches
+              Change une pièce avec les flèches, la saison en haut
             </Text>
           </View>
         ) : (

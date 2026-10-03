@@ -1,12 +1,24 @@
 import { useEffect, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, useAnimatedValue, useWindowDimensions } from 'react-native';
 
+import { useShop } from '@/hooks/useShop';
 import { useTheme } from '@/hooks/useTheme';
 import type { ColorName } from '@/theme';
+
+/** Glyph of each confetti style sold in the shop (an emoji keeps its own colors); plain paper strips otherwise. */
+export const CONFETTI_GLYPHS: Record<string, string> = {
+  'confettis-coeurs': '♥',
+  'confettis-etoiles': '★',
+  'confettis-cacas': '💩',
+};
 
 type ConfettiProps = {
   /** Appelé une fois la dernière particule éteinte. */
   onDone?: () => void;
+  /** Duration of the whole fall, in ms; longer means slower confetti. */
+  duration?: number;
+  /** A given confetti style, for shop previews; the equipped one otherwise. */
+  variant?: string | null;
 };
 
 const PARTICLE_COUNT = 140;
@@ -100,9 +112,11 @@ function fade(u: number): number {
  * seraient inutilement coûteuses, alors qu'ici tout se joue sur le fil natif —
  * seules des transformations et l'opacité sont animées.
  */
-export function Confetti({ onDone }: ConfettiProps) {
+export function Confetti({ onDone, duration = DURATION, variant }: ConfettiProps) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
+  const equipped = useShop().confetti;
+  const glyph = CONFETTI_GLYPHS[(variant === undefined ? equipped : variant) ?? ''];
 
   const progress = useAnimatedValue(0);
   const particles = useMemo(buildParticles, []);
@@ -138,7 +152,7 @@ export function Confetti({ onDone }: ConfettiProps) {
   useEffect(() => {
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: DURATION,
+      duration,
       // Le temps doit rester linéaire : toute la dynamique est dans la
       // trajectoire. Une accélération ici la déformerait deux fois.
       easing: Easing.linear,
@@ -181,6 +195,25 @@ export function Confetti({ onDone }: ConfettiProps) {
           outputRange: ['0deg', `${particle.spin}deg`],
           extrapolate: 'clamp',
         });
+
+        if (glyph) {
+          return (
+            <Animated.Text
+              key={i}
+              style={[
+                styles.particle,
+                {
+                  fontSize: particle.height + 4,
+                  color: colors[particle.colorName],
+                  opacity,
+                  transform: [{ translateX }, { translateY }, { rotate }],
+                },
+              ]}
+            >
+              {glyph}
+            </Animated.Text>
+          );
+        }
 
         return (
           <Animated.View

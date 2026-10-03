@@ -12,6 +12,7 @@ import type { PieceLayout } from './pieceLayouts';
 import { forgetPiece, renamePieceInOutfits } from './outfits';
 import { clearVerdict, countLeft, listVerdicts, moveVerdict } from './sorting';
 import type { Verdict } from './sorting';
+import { THUMB_SIDE, shrinkPhoto } from './shrink';
 import { trimTransparentMargins } from './trim';
 
 /**
@@ -28,12 +29,16 @@ import { trimTransparentMargins } from './trim';
  * vraie table ; ce nommage restera lisible en attendant.
  */
 const PIECES_DIRECTORY = new Directory(Paths.document, 'pieces');
+/** Small copies of the photos, under the same file names, for grids and outfit thumbnails. */
+const THUMBS_DIRECTORY = new Directory(Paths.document, 'pieces-thumbs');
 const SEPARATOR = '__';
 
 export type Piece = {
   /** Nom du fichier sur le disque, sert d'identifiant. */
   id: string;
   uri: string;
+  /** Small copy for grids and thumbnails; the photo itself until that copy exists. */
+  thumbUri: string;
   /** `null` pour les pièces enregistrées avant l'arrivée des catégories. */
   category: CategoryId | null;
   /** Cadrage d'affichage : taille et position, neutres si jamais ajustés. */
@@ -71,16 +76,31 @@ function buildFileName(category: CategoryId | null, extension: string): string {
  * Construit une pièce. Les échelles sont passées en argument plutôt que relues
  * pour chaque fichier : un seul accès disque suffit à toute la liste.
  */
+/** La date de modification invalide les caches d'image quand un fichier est réécrit sur place (rognage des pièces existantes). */
+function versioned(file: File): string {
+  return file.modificationTime ? `${file.uri}?v=${file.modificationTime}` : file.uri;
+}
+
+function thumbFile(id: string): File {
+  return new File(THUMBS_DIRECTORY, id);
+}
+
+function listThumbs(): Set<string> {
+  return THUMBS_DIRECTORY.exists ? new Set(THUMBS_DIRECTORY.list().map((entry) => entry.name)) : new Set();
+}
+
 function toPiece(
   file: File,
   layouts: Record<string, PieceLayout> = listLayouts(),
-  verdicts: Record<string, Verdict> = listVerdicts()
+  verdicts: Record<string, Verdict> = listVerdicts(),
+  thumbs?: Set<string>
 ): Piece {
+  const uri = versioned(file);
+  const hasThumb = thumbs ? thumbs.has(file.name) : thumbFile(file.name).exists;
   return {
     id: file.name,
-    // La date de modification invalide les caches d'image quand un fichier est
-    // réécrit sur place (rognage des pièces existantes).
-    uri: file.modificationTime ? `${file.uri}?v=${file.modificationTime}` : file.uri,
+    uri,
+    thumbUri: hasThumb ? versioned(thumbFile(file.name)) : uri,
     category: parseCategory(file.name),
     layout: layouts[file.name] ?? DEFAULT_LAYOUT,
     verdict: verdicts[file.name] ?? null,
@@ -93,10 +113,11 @@ export function listPieces(): Piece[] {
 
   const layouts = listLayouts();
   const verdicts = listVerdicts();
+  const thumbs = listThumbs();
 
   return PIECES_DIRECTORY.list()
     .filter((entry): entry is File => entry instanceof File)
-    .map((file) => toPiece(file, layouts, verdicts))
+    .map((file) => toPiece(file, layouts, verdicts, thumbs))
     .sort((a, b) => b.id.localeCompare(a.id));
 }
 
@@ -110,7 +131,9 @@ export async function addPiece(
   const destination = new File(PIECES_DIRECTORY, buildFileName(category, extension));
 
   const trimmed = await trimTransparentMargins(sourceUri);
-  await new File(trimmed ?? sourceUri).copy(destination);
+  const shrunk = await shrinkPhoto(trimmed ?? sourceUri);
+  await new File(shrunk ?? trimmed ?? sourceUri).copy(destination);
+  await writeThumbnail(destination);
 
   return toPiece(destination);
 }
@@ -135,7 +158,9 @@ export async function addPieceFromUrl(
     const destination = new File(PIECES_DIRECTORY, buildFileName(category, extension));
 
     const trimmed = await trimTransparentMargins(downloaded.uri);
-    await (trimmed ? new File(trimmed) : downloaded).copy(destination);
+    const shrunk = await shrinkPhoto(trimmed ?? downloaded.uri);
+    await new File(shrunk ?? trimmed ?? downloaded.uri).copy(destination);
+    await writeThumbnail(destination);
 
     return toPiece(destination);
   } finally {
@@ -165,6 +190,7 @@ export function setPieceCategory(id: string, category: CategoryId | null): Piece
 
   if (name !== id) {
     file.rename(name);
+    if (thumbFile(id).exists) thumbFile(id).rename(name);
 
     // L'échelle est indexée par nom de fichier : reclasser renomme, donc il faut
     // déplacer l'entrée, sinon l'ajustement de cadrage serait perdu.
@@ -222,6 +248,7 @@ export async function trimExistingPieces(): Promise<string[]> {
     const source = new File(trimmed);
     entry.write(await source.bytes());
     source.delete();
+    await writeThumbnail(entry);
 
     forgetPieceLayout(entry.name);
     trimmedIds.push(entry.name);
@@ -231,11 +258,78 @@ export async function trimExistingPieces(): Promise<string[]> {
   return trimmedIds;
 }
 
+const SHRINK_DONE_FILE = new File(Paths.document, 'pieces-shrunk-v1');
+let shrinking: Promise<number> | null = null;
+
+/** Shrinks in place, once, the photos saved before imports were capped in size; resolves to how many were shrunk. */
+export function shrinkExistingPieces(): Promise<number> {
+  shrinking ??= (async () => {
+    if (SHRINK_DONE_FILE.exists) return 0;
+    ensureDirectory();
+    let count = 0;
+    for (const entry of PIECES_DIRECTORY.list()) {
+      if (!(entry instanceof File)) continue;
+      const shrunk = await shrinkPhoto(entry.uri);
+      if (!shrunk) continue;
+      const source = new File(shrunk);
+      entry.write(await source.bytes());
+      source.delete();
+      await writeThumbnail(entry);
+      count += 1;
+    }
+    SHRINK_DONE_FILE.create();
+    return count;
+  })().catch(() => 0);
+  return shrinking;
+}
+
+/** Writes (or rewrites) the small copy of a piece's photo; a photo already small is copied as is. */
+async function writeThumbnail(file: File): Promise<boolean> {
+  try {
+    if (!THUMBS_DIRECTORY.exists) THUMBS_DIRECTORY.create({ intermediates: true, idempotent: true });
+    const target = thumbFile(file.name);
+    if (target.exists) target.delete();
+    const small = await shrinkPhoto(file.uri, THUMB_SIDE);
+    if (small) {
+      const source = new File(small);
+      await source.copy(target);
+      source.delete();
+    } else {
+      await file.copy(target);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let thumbnailing: Promise<number> | null = null;
+
+/** Creates the thumbnails missing (photos saved before thumbnails existed); resolves to how many were made. */
+export function ensureThumbnails(): Promise<number> {
+  thumbnailing ??= (async () => {
+    ensureDirectory();
+    const existing = listThumbs();
+    let count = 0;
+    for (const entry of PIECES_DIRECTORY.list()) {
+      if (!(entry instanceof File) || existing.has(entry.name)) continue;
+      if (await writeThumbnail(entry)) count += 1;
+    }
+    return count;
+  })()
+    .catch(() => 0)
+    .finally(() => {
+      thumbnailing = null;
+    });
+  return thumbnailing;
+}
+
 export function removePiece(id: string): void {
   const file = new File(PIECES_DIRECTORY, id);
   if (file.exists) {
     file.delete();
   }
+  if (thumbFile(id).exists) thumbFile(id).delete();
   // Sans ça, l'échelle et le verdict survivraient à la photo et seraient
   // réattribués par erreur à une future pièce portant le même nom.
   forgetPieceLayout(id);

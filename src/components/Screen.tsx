@@ -5,6 +5,8 @@ import type { Edge } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/hooks/useTheme';
 
+import { FabricPattern } from './FabricPattern';
+
 type ScreenProps = {
   children: ReactNode;
   /** Passe le contenu dans une ScrollView (écrans longs / formulaires). */
@@ -26,6 +28,7 @@ export function Screen({ children, scrollable = false, edges = ['bottom'] }: Scr
 
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]} edges={edges}>
+      <FabricPattern />
       {scrollable ? (
         <ScrollView style={styles.flex} contentContainerStyle={{ padding: spacing.md }}>
           {children}

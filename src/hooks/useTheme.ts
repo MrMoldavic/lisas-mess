@@ -1,5 +1,7 @@
-import { colorsFor, gradientsFor, radius, spacing, typography } from '@/theme';
+import { colorsFor, gradientsFor, isFabricName, radius, spacing, typography } from '@/theme';
 import type { Colors, ColorScheme, Gradient, GradientName } from '@/theme';
+
+import { useShop } from './useShop';
 
 export type Theme = {
   scheme: ColorScheme;
@@ -21,16 +23,26 @@ export type Theme = {
  */
 const SCHEME: ColorScheme = 'light';
 
-const THEME: Theme = {
-  scheme: SCHEME,
-  colors: colorsFor(SCHEME),
-  gradients: gradientsFor(SCHEME),
-  spacing,
-  radius,
-  typography,
-};
+/** One theme object per fabric, built once, so screens keep a stable reference. */
+const themes = new Map<string, Theme>();
 
-/** Point d'entrée unique pour le style : palette résolue et échelles. */
+function themeFor(fabric: string): Theme {
+  let theme = themes.get(fabric);
+  if (!theme) {
+    theme = {
+      scheme: SCHEME,
+      colors: colorsFor(SCHEME, isFabricName(fabric) ? fabric : 'lin'),
+      gradients: gradientsFor(SCHEME),
+      spacing,
+      radius,
+      typography,
+    };
+    themes.set(fabric, theme);
+  }
+  return theme;
+}
+
+/** Point d'entrée unique pour le style : palette résolue (selon le tissu porté, voir la boutique) et échelles. */
 export function useTheme(): Theme {
-  return THEME;
+  return themeFor(useShop().fabric);
 }

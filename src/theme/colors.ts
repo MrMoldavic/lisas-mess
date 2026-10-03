@@ -58,10 +58,46 @@ export type ColorName = keyof typeof palette;
 export type ColorScheme = 'light' | 'dark';
 export type Colors = Record<ColorName, string>;
 
-export function colorsFor(scheme: ColorScheme): Colors {
-  return Object.fromEntries(
+/** Background fabrics sold in the shop: each one replaces the linen surfaces of the light theme. */
+export const fabrics = {
+  lin: {},
+  jean: {
+    background: '#DDE6EF',
+    surface: '#F5F8FC',
+    surfaceAlt: '#C8D6E5',
+    border: '#B4C6DA',
+    surfaceDeep: '#B4C6DA',
+    stitch: '#E0A458',
+  },
+  vichy: {
+    background: '#F9E6EC',
+    surface: '#FFF6F8',
+    surfaceAlt: '#F2D3DD',
+    border: '#EBC3D0',
+    surfaceDeep: '#EBC3D0',
+    stitch: '#E2A0B4',
+  },
+  menthe: {
+    background: '#E3F2EC',
+    surface: '#F6FCF9',
+    surfaceAlt: '#CFE8DE',
+    border: '#BBDCCF',
+    surfaceDeep: '#BBDCCF',
+    stitch: '#86C2AA',
+  },
+} satisfies Record<string, Partial<Colors>>;
+
+export type FabricName = keyof typeof fabrics;
+
+export function isFabricName(name: string): name is FabricName {
+  return name in fabrics;
+}
+
+export function colorsFor(scheme: ColorScheme, fabric: FabricName = 'lin'): Colors {
+  const base = Object.fromEntries(
     Object.entries(palette).map(([name, variants]) => [name, variants[scheme]])
   ) as Colors;
+  return scheme === 'light' ? { ...base, ...fabrics[fabric] } : base;
 }
 
 /** Dégradés de l'app. Le tuple est figé car LinearGradient exige au moins 2 couleurs. */

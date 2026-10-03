@@ -9,7 +9,6 @@ import {
   Image,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -26,6 +25,8 @@ import {
   SeasonPills,
 } from '@/components';
 import type { CategoryFilter, Mode, SeasonFilter } from '@/components';
+import { outfitFrame } from '@/components/outfitFrames';
+import { useShop } from '@/hooks/useShop';
 import { useTheme } from '@/hooks/useTheme';
 import { fonts } from '@/theme';
 import {
@@ -46,20 +47,20 @@ import {
   BUTTONS_PER_LEFT,
   clearOutfitLayouts,
   toggleOutfitFavorite,
-  updateOutfitPieces,
+  updateOutfit,
   DuplicateOutfitError,
   needsTrimOfExistingPieces,
   trimExistingPieces,
   resetOutfitScalesFor,
 } from '@/services';
-import type { Outfit, Piece } from '@/services';
+import type { Outfit, OutfitDraft, Piece } from '@/services';
 import {
   colorNameForCategory,
   colorNameForSeason,
   findCategory,
   findSeason,
 } from '@/types';
-import type { CategoryId, OutfitSlot } from '@/types';
+import type { CategoryId } from '@/types';
 
 const CAMERA_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
@@ -93,6 +94,8 @@ export default function PiecesScreen() {
   const [outfitArea, setOutfitArea] = useState({ width: 0, height: 0 });
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [outfits, setOutfits] = useState<Outfit[]>([]);
+  /** False on the first frame: the screen slides in at once, the grids fill in during the animation. */
+  const [loaded, setLoaded] = useState(false);
   /** Tenue affichée en grand, `null` si la vue est fermée. */
   const [viewing, setViewing] = useState<Outfit | null>(null);
   // `?mode=outfits` (tiroir « Mes tenues » de l'accueil) ouvre directement sur les tenues.
@@ -100,6 +103,9 @@ export default function PiecesScreen() {
   const [mode, setMode] = useState<Mode>(params.mode === 'outfits' ? 'outfits' : 'pieces');
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [seasonFilter, setSeasonFilter] = useState<SeasonFilter>('all');
+  /** Shows only the outfits starred as favorites, on top of the season filter. */
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const shop = useShop();
   const [status, setStatus] = useState<Status>(null);
   /** Pièce dont on est en train de choisir la catégorie. */
   const [detail, setDetail] = useState<Piece | null>(null);
@@ -109,8 +115,6 @@ export default function PiecesScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    setPieces(listPieces());
-
     // Les pièces importées avant le rognage automatique gardent leurs marges :
     // on propose une fois de les traiter. « Plus tard » reposera la question.
     if (!needsTrimOfExistingPieces()) return;
@@ -139,10 +143,15 @@ export default function PiecesScreen() {
     );
   }, []);
 
-  /** Relu à chaque retour sur l'écran, notamment après la création d'une tenue. */
+  /** Relu à chaque retour sur l'écran, notamment après la création d'une tenue ; une image plus tard, pour que l'écran glisse aussitôt. */
   useFocusEffect(
     useCallback(() => {
-      setOutfits(listOutfits());
+      const frame = requestAnimationFrame(() => {
+        setPieces(listPieces());
+        setOutfits(listOutfits());
+        setLoaded(true);
+      });
+      return () => cancelAnimationFrame(frame);
     }, [])
   );
 
@@ -153,17 +162,18 @@ export default function PiecesScreen() {
 
   const visibleOutfits = useMemo(
     () =>
-      seasonFilter === 'all'
-        ? outfits
-        : outfits.filter((outfit) => outfit.season === seasonFilter),
-    [outfits, seasonFilter]
+      outfits.filter(
+        (outfit) =>
+          (seasonFilter === 'all' || outfit.season === seasonFilter) && (!onlyFavorites || outfit.favorite)
+      ),
+    [onlyFavorites, outfits, seasonFilter]
   );
 
-  /** Enregistre les vêtements choisis dans le mode « Modifier » de la vue agrandie. */
-  const changeOutfitPieces = useCallback(
-    (outfit: Outfit, selection: Record<OutfitSlot, string | null>): boolean => {
+  /** Enregistre les vêtements et la saison choisis dans le mode « Modifier » de la vue agrandie. */
+  const changeOutfit = useCallback(
+    (outfit: Outfit, draft: OutfitDraft): boolean => {
       try {
-        const updated = updateOutfitPieces(outfit.id, selection);
+        const updated = updateOutfit(outfit.id, draft);
         setOutfits(listOutfits());
         setViewing(updated);
         return true;
@@ -400,28 +410,60 @@ export default function PiecesScreen() {
 
   if (mode === 'outfits') {
     const season = findSeason(seasonFilter === 'all' ? null : seasonFilter);
+    const count = visibleOutfits.length;
+    // A blank line until the outfits are read, rather than a passing « Aucune tenue ».
+    const outfitsTitle = !loaded
+      ? ' '
+      : count > 0
+        ? `${count} tenue${count > 1 ? 's' : ''}${onlyFavorites ? ` favorite${count > 1 ? 's' : ''}` : ''}`
+        : onlyFavorites
+          ? season
+            ? `Aucune favorite ${season.inPhrase}`
+            : 'Aucune tenue favorite'
+          : season
+            ? `Aucune tenue ${season.inPhrase}`
+            : 'Aucune tenue';
+    const outfitsHint =
+      loaded && count === 0
+        ? onlyFavorites
+          ? "Touche l'étoile d'une tenue pour la retrouver ici."
+          : 'Un haut, un bas et une paire de chaussures.'
+        : 'Appuie sur une tenue pour la voir en grand.';
 
     return (
       <Screen>
         <ModeSwitch selected={mode} onSelect={setMode} />
 
-        <View style={{ paddingTop: spacing.sm }}>
-          <SeasonPills selected={seasonFilter} onSelect={setSeasonFilter} />
+        <View style={[styles.outfitFilters, { gap: spacing.sm, paddingTop: spacing.sm }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Favorites seulement"
+            accessibilityState={{ selected: onlyFavorites }}
+            onPress={() => setOnlyFavorites((current) => !current)}
+            style={({ pressed }) => [
+              styles.favoriteFilter,
+              {
+                borderRadius: radius.full,
+                backgroundColor: onlyFavorites ? colors.primary : colors.surface,
+                borderColor: onlyFavorites ? colors.primary : colors.border,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name={onlyFavorites ? 'star' : 'star-outline'}
+              size={18}
+              color={onlyFavorites ? colors.onPrimary : colors.primary}
+            />
+          </Pressable>
+          <View style={styles.seasonFilter}>
+            <SeasonPills selected={seasonFilter} onSelect={setSeasonFilter} />
+          </View>
         </View>
 
         <View style={{ gap: spacing.xs, paddingTop: spacing.md }}>
-          <Text style={[typography.title, { color: colors.text }]}>
-            {visibleOutfits.length === 0
-              ? season
-                ? `Aucune tenue ${season.inPhrase}`
-                : 'Aucune tenue'
-              : `${visibleOutfits.length} tenue${visibleOutfits.length > 1 ? 's' : ''}`}
-          </Text>
-          <Text style={[typography.body, { color: colors.textMuted }]}>
-            {visibleOutfits.length === 0
-              ? 'Un haut, un bas et une paire de chaussures.'
-              : 'Appuie sur une tenue pour la voir en grand.'}
-          </Text>
+          <Text style={[typography.title, { color: colors.text }]}>{outfitsTitle}</Text>
+          <Text style={[typography.body, { color: colors.textMuted }]}>{outfitsHint}</Text>
         </View>
 
         {/*
@@ -438,104 +480,118 @@ export default function PiecesScreen() {
           }}
         >
           {outfitArea.width > 0 && (
-            <ScrollView contentContainerStyle={{ paddingVertical: spacing.md }}>
-              <View style={[styles.outfitGrid, { gap: OUTFIT_GAP }]}>
+            // Virtualised: only the visible cards are drawn, each one stacking several photo copies.
+            <FlatList
+              data={[null, ...visibleOutfits]}
+              keyExtractor={(outfit) => outfit?.id ?? 'create'}
+              numColumns={OUTFIT_COLUMNS}
+              columnWrapperStyle={{ gap: OUTFIT_GAP }}
+              contentContainerStyle={{ paddingVertical: spacing.md, gap: OUTFIT_GAP }}
+              initialNumToRender={2}
+              maxToRenderPerBatch={2}
+              windowSize={5}
+              renderItem={({ item: outfit, index }) => {
+                // The first cell is the « + » card that opens the composer.
+                if (!outfit) {
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Créer une tenue"
+                      onPress={() => router.push('/tenue')}
+                      style={({ pressed }) => [
+                        styles.outfitCard,
+                        {
+                          width: outfitCardWidth,
+                          height: outfitCardHeight,
+                          backgroundColor: colors.surfaceAlt,
+                          borderColor: colors.border,
+                          borderRadius: radius.md,
+                          opacity: pressed ? 0.75 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.outfitPlus, { color: colors.primary }]}>+</Text>
+                    </Pressable>
+                  );
+                }
+
+                // A frame bought in the shop dresses the card and shrinks the thumbnail inside.
+                const frame = outfitFrame(shop.frame, colors, index);
+                const thumbWidth = frame ? outfitCardWidth - frame.inset.left - frame.inset.right : outfitCardWidth;
+                const thumbHeight = frame ? outfitCardHeight - frame.inset.top - frame.inset.bottom : outfitCardHeight;
+                return (
                 <Pressable
+                  key={outfit.id}
                   accessibilityRole="button"
-                  accessibilityLabel="Créer une tenue"
-                  onPress={() => router.push('/tenue')}
+                  accessibilityLabel="Voir cette tenue"
+                  onPress={() => setViewing(outfit)}
                   style={({ pressed }) => [
-                    styles.outfitCard,
+                    styles.outfitSaved,
                     {
                       width: outfitCardWidth,
                       height: outfitCardHeight,
                       backgroundColor: colors.surfaceAlt,
-                      borderColor: colors.border,
                       borderRadius: radius.md,
-                      opacity: pressed ? 0.75 : 1,
+                      opacity: pressed ? 0.85 : 1,
                     },
+                    frame?.style,
                   ]}
                 >
-                  <Text style={[styles.outfitPlus, { color: colors.primary }]}>+</Text>
-                </Pressable>
+                  {/* La toile du composeur, en réduction : mêmes proportions, même cadrage. */}
+                  <View style={[styles.outfitPhoto, { backgroundColor: colors.surfaceAlt }]}>
+                    <OutfitThumbnail outfit={outfit} pieces={pieceById} width={thumbWidth} height={thumbHeight} />
+                  </View>
 
-                {visibleOutfits.map((outfit) => {
-                  return (
-                  <Pressable
-                    key={outfit.id}
-                    accessibilityRole="button"
-                    accessibilityLabel="Voir cette tenue"
-                    onPress={() => setViewing(outfit)}
-                    style={({ pressed }) => [
-                      styles.outfitSaved,
-                      {
-                        width: outfitCardWidth,
-                        height: outfitCardHeight,
-                        backgroundColor: colors.surfaceAlt,
-                        borderRadius: radius.md,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
-                  >
-                    {/* La toile du composeur, en réduction : mêmes proportions, même cadrage. */}
-                    <OutfitThumbnail
-                      outfit={outfit}
-                      pieces={pieceById}
-                      width={outfitCardWidth}
-                      height={outfitCardHeight}
-                    />
-
-                    {/*
-                      Badge posé seulement si la tenue porte une saison : une
-                      tenue sans saison vaut pour toutes, et un badge « Toute
-                      saison » sur chaque carte encombrerait la grille pour ne
-                      rien dire.
-                    */}
-                    {outfit.season && (
-                      <View
-                        style={[
-                          styles.outfitSeason,
-                          {
-                            backgroundColor: colors[colorNameForSeason(outfit.season)],
-                            borderRadius: radius.full,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.outfitSeasonLabel, { color: colors.onPrimary }]}>
-                          {findSeason(outfit.season)?.label}
-                        </Text>
-                      </View>
-                    )}
-
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: outfit.favorite }}
-                      accessibilityLabel={
-                        outfit.favorite ? 'Retirer des favoris' : 'Mettre en favori'
-                      }
-                      // hitSlop élargit la zone tactile sans agrandir l'étoile,
-                      // qui reste petite sur une carte de 175 points.
-                      hitSlop={10}
-                      onPress={() => toggleFavorite(outfit)}
-                      style={({ pressed }) => [
-                        styles.outfitStar,
-                        { opacity: pressed ? 0.5 : 1 },
+                  {/*
+                    Badge posé seulement si la tenue porte une saison : une
+                    tenue sans saison vaut pour toutes, et un badge « Toute
+                    saison » sur chaque carte encombrerait la grille pour ne
+                    rien dire.
+                  */}
+                  {outfit.season && (
+                    <View
+                      style={[
+                        styles.outfitSeason,
+                        {
+                          backgroundColor: colors[colorNameForSeason(outfit.season)],
+                          borderRadius: radius.full,
+                        },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.outfitStarGlyph,
-                          { color: outfit.favorite ? colors.primary : colors.textMuted },
-                        ]}
-                      >
-                        {outfit.favorite ? '★' : '☆'}
+                      <Text style={[styles.outfitSeasonLabel, { color: colors.onPrimary }]}>
+                        {findSeason(outfit.season)?.label}
                       </Text>
-                    </Pressable>
+                    </View>
+                  )}
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: outfit.favorite }}
+                    accessibilityLabel={
+                      outfit.favorite ? 'Retirer des favoris' : 'Mettre en favori'
+                    }
+                    // hitSlop élargit la zone tactile sans agrandir l'étoile,
+                    // qui reste petite sur une carte de 175 points.
+                    hitSlop={10}
+                    onPress={() => toggleFavorite(outfit)}
+                    style={({ pressed }) => [
+                      styles.outfitStar,
+                      { opacity: pressed ? 0.5 : 1 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.outfitStarGlyph,
+                        { color: outfit.favorite ? colors.primary : colors.textMuted },
+                      ]}
+                    >
+                      {outfit.favorite ? '★' : '☆'}
+                    </Text>
                   </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
+                </Pressable>
+                );
+              }}
+            />
           )}
         </View>
 
@@ -543,7 +599,7 @@ export default function PiecesScreen() {
           outfit={viewing}
           pieces={pieceById}
           onToggleFavorite={toggleFavorite}
-          onChangePieces={changeOutfitPieces}
+          onChange={changeOutfit}
           onResetFraming={resetOutfitFraming}
           onDelete={confirmRemoveOutfit}
           onClose={() => setViewing(null)}
@@ -569,14 +625,18 @@ export default function PiecesScreen() {
         data={visible}
         keyExtractor={(piece) => piece.id}
         numColumns={3}
+        initialNumToRender={5}
+        maxToRenderPerBatch={4}
         columnWrapperStyle={{ gap: spacing.sm }}
         contentContainerStyle={{ gap: spacing.sm, paddingBottom: spacing.md }}
         ListHeaderComponent={
           <View style={{ gap: spacing.xs, paddingTop: spacing.md }}>
             <Text style={[typography.title, { color: colors.text }]}>
-              {visible.length === 0
-                ? 'Aucune pièce'
-                : `${visible.length} pièce${visible.length > 1 ? 's' : ''}`}
+              {!loaded
+                ? ' '
+                : visible.length === 0
+                  ? 'Aucune pièce'
+                  : `${visible.length} pièce${visible.length > 1 ? 's' : ''}`}
             </Text>
             <Text style={[typography.body, { color: colors.textMuted }]}>
               {selectedCategory
@@ -586,24 +646,27 @@ export default function PiecesScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View
-            style={[
-              styles.empty,
-              {
-                backgroundColor: colors.surfaceAlt,
-                borderColor: colors.border,
-                borderRadius: radius.lg,
-                gap: spacing.xs,
-              },
-            ]}
-          >
-            <Text style={styles.emptyEmoji}>📷</Text>
-            <Text style={[typography.body, { color: colors.textMuted }]}>
-              {filter === 'all'
-                ? "Ta première pièce t'attend."
-                : 'Rien dans cette catégorie pour le moment.'}
-            </Text>
-          </View>
+          // Not before the pieces are read: no passing « Ta première pièce t'attend ».
+          !loaded ? null : (
+            <View
+              style={[
+                styles.empty,
+                {
+                  backgroundColor: colors.surfaceAlt,
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  gap: spacing.xs,
+                },
+              ]}
+            >
+              <Text style={styles.emptyEmoji}>📷</Text>
+              <Text style={[typography.body, { color: colors.textMuted }]}>
+                {filter === 'all'
+                  ? "Ta première pièce t'attend."
+                  : 'Rien dans cette catégorie pour le moment.'}
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) => {
           const category = findCategory(item.category);
@@ -622,7 +685,7 @@ export default function PiecesScreen() {
                 },
               ]}
             >
-              <Image source={{ uri: item.uri }} style={styles.photo} resizeMode="contain" />
+              <Image source={{ uri: item.thumbUri }} style={styles.photo} resizeMode="contain" />
               {category && (
                 <View
                   style={[
@@ -718,10 +781,9 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: { fontSize: 32 },
   outfitArea: { flex: 1 },
-  outfitGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
+  outfitFilters: { flexDirection: 'row', alignItems: 'center' },
+  favoriteFilter: { width: 38, height: 38, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  seasonFilter: { flex: 1 },
   outfitCard: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -740,6 +802,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
 
+  outfitPhoto: { flex: 1, overflow: 'hidden', borderRadius: 2 },
   outfitSeason: {
     position: 'absolute',
     top: 6,

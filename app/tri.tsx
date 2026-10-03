@@ -17,7 +17,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import { Bobine, Button, PieceSticker, Relief, ScatteredButtons, Screen } from '@/components';
+import { Button, Mascot, PieceSticker, Relief, ScatteredButtons, Screen } from '@/components';
 import type { Scattered, Tone } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
 import {
@@ -270,7 +270,7 @@ export default function SortScreen() {
         <ScatteredButtons items={SCATTERED} />
         <View style={[styles.choose, { gap: spacing.lg }]}>
           <View style={[styles.chooseHead, { gap: spacing.sm }]}>
-            <Bobine size={64} />
+            <Mascot size={64} />
             <Text style={[typography.title, { color: colors.text, textAlign: 'center' }]}>
               On trie quoi aujourd&apos;hui ?
             </Text>
@@ -333,7 +333,7 @@ export default function SortScreen() {
       <Screen>
         <ScatteredButtons items={SCATTERED} />
         <View style={[styles.end, { gap: spacing.md }]}>
-          <Bobine size={80} />
+          <Mascot size={80} />
           <Text style={[typography.title, { color: colors.text, textAlign: 'center' }]}>
             {queue.length === 0 ? 'Rien à trier ici' : 'Tri terminé !'}
           </Text>

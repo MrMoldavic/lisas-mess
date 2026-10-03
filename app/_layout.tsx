@@ -64,6 +64,7 @@ export default function RootLayout() {
           <Stack.Screen name="tenue" options={{ title: 'Sur le mannequin' }} />
           <Stack.Screen name="tri" options={{ title: 'Le tri' }} />
           <Stack.Screen name="sortie" options={{ title: 'À sortir' }} />
+          <Stack.Screen name="boutique" options={{ title: 'La boutique' }} />
           <Stack.Screen name="+not-found" options={{ title: 'Introuvable' }} />
         </Stack>
       </SafeAreaProvider>

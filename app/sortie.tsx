@@ -3,7 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 
-import { Bobine, Button, PieceSticker, Relief, Screen } from '@/components';
+import { Button, Mascot, PieceSticker, Relief, Screen } from '@/components';
 import { useTheme } from '@/hooks/useTheme';
 import {
   BUTTONS_PER_LEFT,
@@ -106,7 +106,7 @@ export default function LeavingScreen() {
     return (
       <Screen>
         <View style={[styles.empty, { gap: spacing.md }]}>
-          <Bobine size={80} />
+          <Mascot size={80} />
           <Text style={[typography.title, { color: colors.text, textAlign: 'center' }]}>Rien à sortir</Text>
           <Text style={[typography.body, styles.emptyText, { color: colors.textMuted }]}>
             Pendant le tri, glisse une pièce vers la gauche (« Je trie ») pour la mettre ici.
@@ -157,7 +157,7 @@ export default function LeavingScreen() {
                 <Text style={[styles.chipText, { color: colors.onPrimary }]}>{category?.label ?? 'À classer'}</Text>
               </View>
 
-              <PieceSticker uri={item.uri} outline={2} style={styles.photo} />
+              <PieceSticker uri={item.thumbUri} outline={2} style={styles.photo} />
 
               <View style={[styles.actions, { gap: spacing.sm }]}>
                 <Relief

@@ -132,11 +132,8 @@ export default function OutfitComposerScreen() {
     (slot) => !locked[slot.key] && bySlot[slot.key].length > 1
   );
 
-  // `?surprise=1` (tiroir « Au hasard » de l'accueil) : un tirage dès que les
-  // pièces sont chargées, une seule fois. `?challenge=1` (carte du défi) :
-  // le défi du jour est rappelé en haut de l'écran.
-  const { surprise, challenge: fromChallenge, piece: startPiece } = useLocalSearchParams<{
-    surprise?: string;
+  // `?challenge=1` (carte du défi) : le défi du jour est rappelé en haut de l'écran.
+  const { challenge: fromChallenge, piece: startPiece } = useLocalSearchParams<{
     challenge?: string;
     /** Piece to start from (« + » of the piece view): put in its slot and locked against the dice. */
     piece?: string;
@@ -153,12 +150,6 @@ export default function OutfitComposerScreen() {
       return;
     }
   }, [bySlot, cycle, startPiece]);
-  const surprised = useRef(false);
-  useEffect(() => {
-    if (surprise !== '1' || surprised.current || !canShuffle) return;
-    surprised.current = true;
-    shuffle();
-  }, [canShuffle, shuffle, surprise]);
 
   const adjust = useCallback((slot: OutfitSlot, piece: Piece, layout: PieceLayout) => {
     setOffsets((current) => ({

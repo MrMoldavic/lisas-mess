@@ -1,5 +1,5 @@
-export { palette, gradients, colorsFor, gradientsFor } from './colors';
-export type { Colors, ColorName, ColorScheme, Gradient, GradientName } from './colors';
+export { palette, gradients, colorsFor, gradientsFor, fabrics, isFabricName } from './colors';
+export type { Colors, ColorName, ColorScheme, FabricName, Gradient, GradientName } from './colors';
 
 /** Échelle d'espacement : toujours utiliser ces valeurs plutôt que des nombres en dur. */
 export const spacing = {
